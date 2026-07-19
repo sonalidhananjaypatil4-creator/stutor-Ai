@@ -894,3 +894,397 @@ textarea::placeholder {
     font-size: 0.75rem;
   }
 }
+
+/* ============================================================
+   VOICE FEATURES — Mic-to-Text Buttons & Voice Conversation
+   ============================================================ */
+
+/* Textarea wrapper for positioning mic button */
+.textarea-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.textarea-wrapper textarea {
+  padding-right: 48px; /* Room for mic button */
+}
+
+/* Mic-to-text button (inline, positioned inside textarea) */
+.mic-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 2;
+  padding: 0;
+}
+
+.mic-btn:hover {
+  background-color: var(--item-hover);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+/* Listening state (pulsing red) */
+.mic-btn.listening {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5);
+  animation: mic-pulse-ring 1.5s ease-out infinite;
+}
+
+.mic-pulse {
+  display: none;
+}
+
+.mic-btn.listening .mic-pulse {
+  display: block;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  animation: mic-dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mic-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+@keyframes mic-dot-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.6; }
+}
+
+/* Voice-supported visibility — JS adds this class to body */
+body.voice-supported .mic-btn.hidden {
+  display: none;
+}
+
+body.voice-supported .mic-btn {
+  display: flex;
+}
+
+/* ---- Voice Conversation Start Button ---- */
+.voice-start-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+}
+
+body.voice-supported .voice-start-row.hidden {
+  display: none;
+}
+
+body.voice-supported .voice-start-row {
+  display: flex;
+}
+
+.btn-voice {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px 28px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-voice:hover {
+  background: linear-gradient(135deg, #6d28d9, #5b21b6);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+}
+
+.btn-voice:active {
+  transform: translateY(0);
+}
+
+/* ---- Voice Conversation Panel ---- */
+.voice-panel {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease;
+  animation: fadeIn 0.3s ease;
+}
+
+/* Walkie-talkie info note */
+.voice-info-note {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(109, 40, 217, 0.04));
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+.voice-info-note p {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+  flex: 1;
+}
+
+.btn-voice-dismiss {
+  background-color: #7c3aed;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+  font-family: 'Work Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.btn-voice-dismiss:hover {
+  background-color: #6d28d9;
+}
+
+/* Status indicator */
+.voice-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.voice-status-indicator {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.voice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #dc2626;
+  animation: voice-bounce 1.2s ease-in-out infinite;
+}
+
+.voice-dot:nth-child(2) { animation-delay: 0.15s; }
+.voice-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes voice-bounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+  40% { transform: scale(1.2); opacity: 1; }
+}
+
+/* Status variants */
+.voice-status.status-listening .voice-dot { background-color: #dc2626; }
+.voice-status.status-thinking .voice-dot {
+  background-color: var(--accent-color);
+  animation: voice-bounce 0.8s ease-in-out infinite;
+}
+.voice-status.status-speaking .voice-dot {
+  background-color: #16a34a;
+  animation: voice-bounce 1s ease-in-out infinite;
+}
+
+.voice-status-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+/* Turn prompt */
+.voice-prompt {
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  padding: 8px 0 16px;
+  font-style: italic;
+}
+
+/* Transcript area */
+.voice-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 12px;
+  margin-bottom: 20px;
+  min-height: 60px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  transition: background-color var(--transition-speed) ease;
+}
+
+/* Chat bubbles */
+.voice-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  word-wrap: break-word;
+  animation: fadeIn 0.25s ease;
+}
+
+.voice-bubble.student {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.voice-bubble.tutor {
+  align-self: flex-start;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 4px;
+}
+
+.voice-bubble-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.voice-bubble.student .voice-bubble-label { color: rgba(255,255,255,0.8); }
+.voice-bubble.tutor .voice-bubble-label { color: var(--text-secondary); }
+
+/* End conversation button */
+.voice-end-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.btn-end-voice {
+  background-color: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-family: 'Work Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.btn-end-voice:hover {
+  background-color: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.btn-end-voice:active {
+  transform: translateY(0);
+}
+
+/* Mobile adjustments for voice features */
+@media (max-width: 768px) {
+  .voice-panel {
+    padding: 16px;
+  }
+
+  .voice-info-note {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .voice-transcript {
+    max-height: 300px;
+  }
+
+  .voice-bubble {
+    max-width: 92%;
+  }
+}
+
+@media (max-width: 480px) {
+  .mic-btn {
+    width: 30px;
+    height: 30px;
+    bottom: 8px;
+    right: 8px;
+  }
+
+  .mic-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .btn-voice {
+    width: 100%;
+    font-size: 0.88rem;
+    padding: 10px 20px;
+  }
+
+  .btn-end-voice {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   VISUAL DIAGRAMS (MERMAID)
+   ============================================================ */
+.diagram-card {
+  margin-top: 16px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 24px;
+  transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease;
+}
+
+.diagram-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.diagram-wrapper svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+

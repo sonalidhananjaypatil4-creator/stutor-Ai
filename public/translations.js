@@ -15,6 +15,7 @@ window.APP_TRANSLATIONS = {
     attemptValidationMsgRepetition: "Please write a genuine attempt (not just repeating characters).",
     attemptValidationMsgWordRepetition: "Please write a genuine attempt (avoid repeating the same words).",
     attemptValidationMsgReadOnly: "Viewing past attempt",
+    attemptValidationMsgSuccess: "Great! Your attempt unlocks the tutor.",
     getHintBtn: "Get a Hint",
     getHintBtnLocked: "🔒 Get a Hint",
     getHintBtnUnlocked: "🔓 Get a Hint",
@@ -34,7 +35,23 @@ window.APP_TRANSLATIONS = {
     toastHistoryCleared: "History cleared",
     toastFeedbackSaved: "Feedback saved!",
     toastLanguageUpdated: "Language set to English",
-    attemptedStamp: "ATTEMPTED ✓"
+    attemptedStamp: "ATTEMPTED ✓",
+    visualExplanation: "Visual Explanation",
+    // Voice feature translations
+    voiceConversationBtn: "🎙️ Start Voice Conversation",
+    voiceEndBtn: "End Conversation",
+    voiceListening: "Listening…",
+    voiceThinking: "Thinking…",
+    voiceSpeaking: "Speaking…",
+    voiceYouSaid: "You said:",
+    voiceTutorSaid: "Tutor said:",
+    voiceWalkieTalkieNote: "Speak clearly and wait for a pause before the app responds. This isn't a live phone call — it takes turns listening and speaking, like a walkie-talkie.",
+    voiceGotIt: "Got it!",
+    voiceFirstTurnPrompt: "🎤 Ask your question aloud…",
+    voiceSecondTurnPrompt: "🎤 Now describe your attempt aloud…",
+    voiceFollowUpPrompt: "🎤 Ask a follow-up or say \"end\"…",
+    voiceSessionSaved: "Voice session saved to history",
+    voiceMicTooltip: "Speak to type"
   },
   hi: {
     appTitle: "पहले अपना हल दिखाएं",
@@ -52,6 +69,7 @@ window.APP_TRANSLATIONS = {
     attemptValidationMsgRepetition: "कृपया एक वास्तविक प्रयास लिखें (केवल अक्षरों को न दोहराएं)।",
     attemptValidationMsgWordRepetition: "कृपया एक वास्तविक प्रयास लिखें (एक ही शब्द दोहराने से बचें)।",
     attemptValidationMsgReadOnly: "पुराना प्रयास देख रहे हैं",
+    attemptValidationMsgSuccess: "बहुत अच्छा! आपके प्रयास ने ट्यूटर को अनलॉक कर दिया।",
     getHintBtn: "संकेत लें",
     getHintBtnLocked: "🔒 संकेत लें",
     getHintBtnUnlocked: "🔓 संकेत लें",
@@ -71,7 +89,23 @@ window.APP_TRANSLATIONS = {
     toastHistoryCleared: "इतिहास साफ़ किया गया",
     toastFeedbackSaved: "प्रतिक्रिया सहेजी गई!",
     toastLanguageUpdated: "भाषा बदलकर हिन्दी कर दी गई है",
-    attemptedStamp: "प्रयास किया ✓"
+    attemptedStamp: "प्रयास किया ✓",
+    visualExplanation: "दृश्य स्पष्टीकरण (रेखाचित्र)",
+    // Voice feature translations
+    voiceConversationBtn: "🎙️ आवाज़ से बात करें",
+    voiceEndBtn: "बातचीत समाप्त करें",
+    voiceListening: "सुन रहे हैं…",
+    voiceThinking: "सोच रहे हैं…",
+    voiceSpeaking: "बोल रहे हैं…",
+    voiceYouSaid: "आपने कहा:",
+    voiceTutorSaid: "ट्यूटर ने कहा:",
+    voiceWalkieTalkieNote: "साफ़ बोलें और ऐप के जवाब देने से पहले रुकें। यह फ़ोन कॉल नहीं है — यह बारी-बारी से सुनता और बोलता है, जैसे वॉकी-टॉकी।",
+    voiceGotIt: "समझ गए!",
+    voiceFirstTurnPrompt: "🎤 अपना प्रश्न बोलें…",
+    voiceSecondTurnPrompt: "🎤 अब अपना प्रयास बोलकर बताएं…",
+    voiceFollowUpPrompt: "🎤 और पूछें या \"बंद\" कहें…",
+    voiceSessionSaved: "आवाज़ सत्र इतिहास में सहेजा गया",
+    voiceMicTooltip: "बोलकर टाइप करें"
   },
   mr: {
     appTitle: "आधी तुमचा प्रयत्न दाखवा",
@@ -89,6 +123,7 @@ window.APP_TRANSLATIONS = {
     attemptValidationMsgRepetition: "कृपया एक खरा प्रयत्न लिहा (फक्त अक्षरांची पुनरावृत्ती करू नका).",
     attemptValidationMsgWordRepetition: "कृपया एक खरा प्रयत्न लिहा (तेच शब्द पुन्हा पुन्हा लिहिणे टाळा).",
     attemptValidationMsgReadOnly: "जुना प्रयत्न पाहत आहे",
+    attemptValidationMsgSuccess: "छान! तुमच्या प्रयत्नाने ट्यूटर अनलॉक केले.",
     getHintBtn: "संकेत मिळवा",
     getHintBtnLocked: "🔒 संकेत मिळवा",
     getHintBtnUnlocked: "🔓 संकेत मिळवा",
@@ -108,6 +143,22 @@ window.APP_TRANSLATIONS = {
     toastHistoryCleared: "इतिहास साफ केला",
     toastFeedbackSaved: "प्रतिक्रिया जतन केली!",
     toastLanguageUpdated: "भाषा मराठी मध्ये बदलली गेली आहे",
-    attemptedStamp: "प्रयत्न केला ✓"
+    attemptedStamp: "प्रयत्न केला ✓",
+    visualExplanation: "दृश्य स्पष्टीकरण (आकृती)",
+    // Voice feature translations
+    voiceConversationBtn: "🎙️ आवाजाने बोला",
+    voiceEndBtn: "संभाषण संपवा",
+    voiceListening: "ऐकत आहे…",
+    voiceThinking: "विचार करत आहे…",
+    voiceSpeaking: "बोलत आहे…",
+    voiceYouSaid: "तुम्ही म्हणालात:",
+    voiceTutorSaid: "ट्यूटर म्हणाले:",
+    voiceWalkieTalkieNote: "स्पष्ट बोला आणि ॲप उत्तर देण्यापूर्वी थांबा. हा फोन कॉल नाही — हे वॉकी-टॉकीसारखे आळीपाळीने ऐकते आणि बोलते.",
+    voiceGotIt: "समजले!",
+    voiceFirstTurnPrompt: "🎤 तुमचा प्रश्न बोला…",
+    voiceSecondTurnPrompt: "🎤 आता तुमचा प्रयत्न बोलून सांगा…",
+    voiceFollowUpPrompt: "🎤 आणखी विचारा किंवा \"बंद\" म्हणा…",
+    voiceSessionSaved: "आवाज सत्र इतिहासात जतन केले",
+    voiceMicTooltip: "बोलून टाइप करा"
   }
 };

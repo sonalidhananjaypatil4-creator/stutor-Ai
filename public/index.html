@@ -16,6 +16,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+  
+  <!-- Mermaid.js support -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
 </head>
 <body>
   <div class="app-layout">
@@ -86,13 +89,24 @@
             <!-- Question text area -->
             <div class="input-group">
               <label for="question-input" class="label-kalam" id="question-label">What is the question/problem?</label>
-              <textarea 
-                id="question-input" 
-                rows="4" 
-                placeholder="Paste or type the question you're solving (e.g. Find the roots of x² - 5x + 6 = 0)..."
-                maxlength="3900"
-                tabindex="0"
-              ></textarea>
+              <div class="textarea-wrapper">
+                <textarea 
+                  id="question-input" 
+                  rows="4" 
+                  placeholder="Paste or type the question you're solving (e.g. Find the roots of x² - 5x + 6 = 0)..."
+                  maxlength="3900"
+                  tabindex="0"
+                ></textarea>
+                <button type="button" class="mic-btn hidden" id="mic-question-btn" aria-label="Speak to type" tabindex="0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                  <span class="mic-pulse"></span>
+                </button>
+              </div>
               <div class="meta-row">
                 <span class="error-msg" id="question-error"></span>
                 <span class="char-count" id="question-char-count">0 / 4000</span>
@@ -102,13 +116,24 @@
             <!-- Attempt text area -->
             <div class="input-group attempt-group">
               <label for="attempt-input" class="label-kalam" id="attempt-label">Show your work (How did you try to solve it?):</label>
-              <textarea 
-                id="attempt-input" 
-                rows="5" 
-                placeholder="Show your attempt. Write at least 25 characters of what you tried or how you started..."
-                maxlength="3900"
-                tabindex="0"
-              ></textarea>
+              <div class="textarea-wrapper">
+                <textarea 
+                  id="attempt-input" 
+                  rows="5" 
+                  placeholder="Show your attempt. Write at least 25 characters of what you tried or how you started..."
+                  maxlength="3900"
+                  tabindex="0"
+                ></textarea>
+                <button type="button" class="mic-btn hidden" id="mic-attempt-btn" aria-label="Speak to type" tabindex="0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                  <span class="mic-pulse"></span>
+                </button>
+              </div>
               
               <!-- Repositioned attempt stamp (placed below textarea as a separate row) -->
               <div class="attempt-stamp-row">
@@ -127,6 +152,48 @@
             <div class="action-row" id="action-row">
               <button id="get-hint-btn" class="btn btn-primary disabled" disabled tabindex="0">
                 <span class="btn-lock-icon">🔒</span> <span id="get-hint-btn-text">Get a Hint</span>
+              </button>
+            </div>
+
+            <!-- Voice Conversation Start Button -->
+            <div class="voice-start-row hidden" id="voice-start-row">
+              <button id="voice-conversation-btn" class="btn btn-voice" tabindex="0">
+                <span id="voice-conversation-btn-text">🎙️ Start Voice Conversation</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- Voice Conversation Panel (hidden by default) -->
+          <section id="voice-conversation-panel" class="voice-panel hidden">
+            <!-- Walkie-talkie info note (one-time) -->
+            <div id="voice-info-note" class="voice-info-note hidden">
+              <p id="voice-info-text">Speak clearly and wait for a pause before the app responds. This isn't a live phone call — it takes turns listening and speaking, like a walkie-talkie.</p>
+              <button id="voice-info-dismiss" class="btn-voice-dismiss" tabindex="0">Got it!</button>
+            </div>
+
+            <!-- Status indicator -->
+            <div class="voice-status" id="voice-status">
+              <div class="voice-status-indicator" id="voice-status-indicator">
+                <span class="voice-dot"></span>
+                <span class="voice-dot"></span>
+                <span class="voice-dot"></span>
+              </div>
+              <span class="voice-status-text" id="voice-status-text">Listening…</span>
+            </div>
+
+            <!-- Turn prompt -->
+            <div class="voice-prompt" id="voice-prompt">🎤 Ask your question aloud…</div>
+
+            <!-- Transcript area -->
+            <div class="voice-transcript" id="voice-transcript">
+              <!-- Chat bubbles will be appended here dynamically -->
+            </div>
+
+            <!-- End Conversation Button -->
+            <div class="voice-end-row">
+              <button id="voice-end-btn" class="btn btn-end-voice" tabindex="0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                <span id="voice-end-btn-text">End Conversation</span>
               </button>
             </div>
           </section>
@@ -169,6 +236,14 @@
               </div>
             </div>
 
+            <!-- Hint Visual Diagram -->
+            <div id="hint-diagram-container" class="diagram-card feedback-card hidden">
+              <h2 class="label-kalam" id="visual-explanation-hint-title">Visual Explanation</h2>
+              <div class="card-body diagram-wrapper">
+                <div id="hint-diagram"></div>
+              </div>
+            </div>
+
             <!-- Full explanation loading state (Pulse Skeleton) -->
             <div id="explain-loader" class="loader-box hidden">
               <div class="skeleton-wrapper">
@@ -193,6 +268,14 @@
                 <span class="feedback-label" id="explain-feedback-label">Was this helpful?</span>
                 <button class="feedback-btn thumbs-up" id="explain-thumbs-up" aria-label="Helpful" tabindex="0">👍</button>
                 <button class="feedback-btn thumbs-down" id="explain-thumbs-down" aria-label="Not helpful" tabindex="0">👎</button>
+              </div>
+            </div>
+
+            <!-- Explanation Visual Diagram -->
+            <div id="explain-diagram-container" class="diagram-card feedback-card hidden">
+              <h2 class="label-kalam" id="visual-explanation-explain-title">Visual Explanation</h2>
+              <div class="card-body diagram-wrapper">
+                <div id="explain-diagram"></div>
               </div>
             </div>
 

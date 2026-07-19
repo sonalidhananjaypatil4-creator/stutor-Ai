@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const explanationCard = document.getElementById('explanation-card');
   const explainContent = document.getElementById('explain-content');
   const newQuestionBtn = document.getElementById('new-question-btn');
+  const newQuestionBtnFooter = document.getElementById('new-question-btn-footer');
   const pastSessionBanner = document.getElementById('past-session-banner');
 
   // Feedback Rating Elements
@@ -49,6 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const hintThumbsDown = document.getElementById('hint-thumbs-down');
   const explainThumbsUp = document.getElementById('explain-thumbs-up');
   const explainThumbsDown = document.getElementById('explain-thumbs-down');
+
+  // Diagram Elements
+  const hintDiagramContainer = document.getElementById('hint-diagram-container');
+  const hintDiagram = document.getElementById('hint-diagram');
+  const explainDiagramContainer = document.getElementById('explain-diagram-container');
+  const explainDiagram = document.getElementById('explain-diagram');
 
   // Toast Container
   const toastContainer = document.getElementById('toast-container');
@@ -60,6 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Session State
   let currentSessionId = null;
   let isReadOnly = false;
+  let currentHintMermaidCode = null;
+  let currentExplainMermaidCode = null;
 
   /* ============================================================
      THEME MANAGEMENT
@@ -92,6 +101,73 @@ document.addEventListener('DOMContentLoaded', () => {
       themeIcon.innerHTML = moonIconSvg;
       themeToggleBtn.setAttribute('title', 'Switch to Dark Mode');
       themeToggleBtn.setAttribute('aria-label', 'Switch to Dark Mode');
+    }
+
+    reRenderVisibleDiagrams();
+  }
+
+  function extractMermaidCode(text) {
+    if (!text) return { cleanText: '', mermaidCode: null };
+    const match = text.match(/```mermaid([\s\S]*?)```/i);
+    if (match) {
+      const code = match[1].trim();
+      const cleanText = text.replace(/```mermaid[\s\S]*?```/gi, '').trim();
+      return { cleanText, mermaidCode: code };
+    }
+    return { cleanText: text, mermaidCode: null };
+  }
+
+  async function renderDiagram(containerEl, targetEl, code, elementId) {
+    if (!code) {
+      containerEl.classList.add('hidden');
+      targetEl.innerHTML = '';
+      return;
+    }
+
+    containerEl.classList.remove('hidden');
+    targetEl.innerHTML = '';
+
+    const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
+
+    if (typeof mermaid !== 'undefined') {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: currentTheme,
+          securityLevel: 'loose'
+        });
+
+        const id = elementId + '-svg';
+        
+        const oldSvg = document.getElementById(id);
+        if (oldSvg) oldSvg.remove();
+        const oldErr = document.getElementById('d' + id);
+        if (oldErr) oldErr.remove();
+
+        const { svg } = await mermaid.render(id, code);
+        targetEl.innerHTML = svg;
+      } catch (err) {
+        console.warn('Failed to render Mermaid diagram:', err);
+        containerEl.classList.add('hidden');
+        targetEl.innerHTML = '';
+        
+        const oldSvg = document.getElementById(elementId + '-svg');
+        if (oldSvg) oldSvg.remove();
+        const oldErr = document.getElementById('d' + elementId + '-svg');
+        if (oldErr) oldErr.remove();
+      }
+    } else {
+      console.error('Mermaid.js library is not loaded');
+      containerEl.classList.add('hidden');
+    }
+  }
+
+  function reRenderVisibleDiagrams() {
+    if (currentHintMermaidCode) {
+      renderDiagram(hintDiagramContainer, hintDiagram, currentHintMermaidCode, 'hint-diagram');
+    }
+    if (currentExplainMermaidCode) {
+      renderDiagram(explainDiagramContainer, explainDiagram, currentExplainMermaidCode, 'explain-diagram');
     }
   }
 
@@ -145,6 +221,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Feedback response titles
     document.getElementById('response-hint-title').textContent = dict.responseHintTitle;
     document.getElementById('response-explanation-title').textContent = dict.responseExplanationTitle;
+
+    // Visual Explanation titles
+    const visualHintTitle = document.getElementById('visual-explanation-hint-title');
+    const visualExplainTitle = document.getElementById('visual-explanation-explain-title');
+    if (visualHintTitle) visualHintTitle.textContent = dict.visualExplanation;
+    if (visualExplainTitle) visualExplainTitle.textContent = dict.visualExplanation;
 
     // Stuck link replacement (preserving anchor click listener)
     const stuckTextEl = document.getElementById('stuck-text');
@@ -472,27 +554,38 @@ document.addEventListener('DOMContentLoaded', () => {
     actionRow.classList.add('hidden');
 
     // Load responses
-    hintContent.textContent = session.hint;
+    const hintParsed = extractMermaidCode(session.hint);
+    hintContent.textContent = hintParsed.cleanText;
     renderMath(hintContent);
     responseSection.classList.remove('hidden');
+    
+    currentHintMermaidCode = hintParsed.mermaidCode;
+    renderDiagram(hintDiagramContainer, hintDiagram, hintParsed.mermaidCode, 'hint-diagram');
     
     // Render ratings for hint (disabled in read-only mode)
     disableFeedbackButtons('hint');
     highlightFeedbackButtons('hint', session.hintFeedback);
 
     if (session.fullExplanation) {
-      explainContent.textContent = session.fullExplanation;
+      const explainParsed = extractMermaidCode(session.fullExplanation);
+      explainContent.textContent = explainParsed.cleanText;
       renderMath(explainContent);
       explanationCard.classList.remove('hidden');
       stuckRow.classList.add('hidden');
+      
+      currentExplainMermaidCode = explainParsed.mermaidCode;
+      renderDiagram(explainDiagramContainer, explainDiagram, explainParsed.mermaidCode, 'explain-diagram');
       
       // Render ratings for explanation (disabled in read-only mode)
       disableFeedbackButtons('explain');
       highlightFeedbackButtons('explain', session.explainFeedback);
     } else {
+      currentExplainMermaidCode = null;
       explainContent.textContent = '';
       explanationCard.classList.add('hidden');
       stuckRow.classList.add('hidden');
+      explainDiagramContainer.classList.add('hidden');
+      explainDiagram.innerHTML = '';
     }
 
     // Hide loaders & errors
@@ -672,14 +765,30 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.error || dict.errorTitle);
       }
 
-      // Display response
-      hintContent.textContent = data.text;
+      // Display response — extract Mermaid diagram if present
+      console.log('[Diagram Pipeline] Raw hint response received:', data.text.substring(0, 200) + '...');
+      const hintParsed = extractMermaidCode(data.text);
+      console.log('[Diagram Pipeline] Mermaid code extracted from hint:', hintParsed.mermaidCode ? 'YES (' + hintParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
+      
+      hintContent.textContent = hintParsed.cleanText;
       renderMath(hintContent);
       tutorLoader.classList.add('hidden');
       responseSection.classList.remove('hidden');
       stuckRow.classList.remove('hidden');
 
-      // Create new session object and save it
+      // Render diagram if present
+      currentHintMermaidCode = hintParsed.mermaidCode;
+      if (hintParsed.mermaidCode) {
+        console.log('[Diagram Pipeline] Rendering hint diagram...');
+        renderDiagram(hintDiagramContainer, hintDiagram, hintParsed.mermaidCode, 'hint-diagram').then(() => {
+          console.log('[Diagram Pipeline] Hint diagram render completed');
+        });
+      } else {
+        hintDiagramContainer.classList.add('hidden');
+        hintDiagram.innerHTML = '';
+      }
+
+      // Create new session object and save it (store raw text with mermaid code for history)
       const newSession = {
         id: Date.now().toString(),
         question: question,
@@ -737,13 +846,29 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.error || dict.errorTitle);
       }
 
-      // Display Explanation
-      explainContent.textContent = data.text;
+      // Display Explanation — extract Mermaid diagram if present
+      console.log('[Diagram Pipeline] Raw explanation response received:', data.text.substring(0, 200) + '...');
+      const explainParsed = extractMermaidCode(data.text);
+      console.log('[Diagram Pipeline] Mermaid code extracted from explanation:', explainParsed.mermaidCode ? 'YES (' + explainParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
+
+      explainContent.textContent = explainParsed.cleanText;
       renderMath(explainContent);
       explainLoader.classList.add('hidden');
       explanationCard.classList.remove('hidden');
 
-      // Update session in local storage with the explanation content
+      // Render diagram if present
+      currentExplainMermaidCode = explainParsed.mermaidCode;
+      if (explainParsed.mermaidCode) {
+        console.log('[Diagram Pipeline] Rendering explanation diagram...');
+        renderDiagram(explainDiagramContainer, explainDiagram, explainParsed.mermaidCode, 'explain-diagram').then(() => {
+          console.log('[Diagram Pipeline] Explanation diagram render completed');
+        });
+      } else {
+        explainDiagramContainer.classList.add('hidden');
+        explainDiagram.innerHTML = '';
+      }
+
+      // Update session in local storage with the explanation content (raw text with mermaid for history)
       if (currentSessionId) {
         const sessions = getSessions();
         const sessionIndex = sessions.findIndex(s => s.id === currentSessionId);
@@ -766,4 +891,515 @@ document.addEventListener('DOMContentLoaded', () => {
      ============================================================ */
   initTheme();
   initLanguage();
+
+  /* ============================================================
+     VOICE FEATURES — Mic-to-Text & Turn-Based Conversation
+     ============================================================ */
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const speechSynthesisAPI = window.speechSynthesis;
+  const voiceSupported = !!SpeechRecognitionAPI;
+
+  // Voice UI elements
+  const micQuestionBtn = document.getElementById('mic-question-btn');
+  const micAttemptBtn = document.getElementById('mic-attempt-btn');
+  const voiceStartRow = document.getElementById('voice-start-row');
+  const voiceConversationBtn = document.getElementById('voice-conversation-btn');
+  const voicePanel = document.getElementById('voice-conversation-panel');
+  const voiceInfoNote = document.getElementById('voice-info-note');
+  const voiceInfoDismiss = document.getElementById('voice-info-dismiss');
+  const voiceStatus = document.getElementById('voice-status');
+  const voiceStatusText = document.getElementById('voice-status-text');
+  const voicePrompt = document.getElementById('voice-prompt');
+  const voiceTranscript = document.getElementById('voice-transcript');
+  const voiceEndBtn = document.getElementById('voice-end-btn');
+
+  // Language code mapping
+  function getVoiceLangCode() {
+    const lang = languageSelect.value;
+    const langMap = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' };
+    return langMap[lang] || 'en-IN';
+  }
+
+  if (voiceSupported) {
+    document.body.classList.add('voice-supported');
+
+    // Show mic buttons (remove hidden class)
+    micQuestionBtn.classList.remove('hidden');
+    micAttemptBtn.classList.remove('hidden');
+    voiceStartRow.classList.remove('hidden');
+
+    /* ---- CHANGE A: Mic-to-Text for Textareas ---- */
+    let activeMicRecognition = null;
+    let activeMicButton = null;
+
+    function startMicToText(textarea, micBtn) {
+      // If already listening on this button, stop
+      if (activeMicButton === micBtn) {
+        stopMicToText();
+        return;
+      }
+
+      // Stop any existing recognition
+      stopMicToText();
+
+      const recognition = new SpeechRecognitionAPI();
+      recognition.lang = getVoiceLangCode();
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        // Append to existing text (not overwrite)
+        if (textarea.value && !textarea.value.endsWith(' ') && !textarea.value.endsWith('\n')) {
+          textarea.value += ' ';
+        }
+        textarea.value += transcript;
+        // Trigger input event so form validation updates
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      recognition.onend = () => {
+        if (activeMicButton === micBtn) {
+          micBtn.classList.remove('listening');
+          activeMicRecognition = null;
+          activeMicButton = null;
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('Speech recognition error:', event.error);
+        if (activeMicButton === micBtn) {
+          micBtn.classList.remove('listening');
+          activeMicRecognition = null;
+          activeMicButton = null;
+        }
+      };
+
+      micBtn.classList.add('listening');
+      activeMicRecognition = recognition;
+      activeMicButton = micBtn;
+      recognition.start();
+    }
+
+    function stopMicToText() {
+      if (activeMicRecognition) {
+        try { activeMicRecognition.abort(); } catch(e) { /* ignore */ }
+        activeMicRecognition = null;
+      }
+      if (activeMicButton) {
+        activeMicButton.classList.remove('listening');
+        activeMicButton = null;
+      }
+    }
+
+    micQuestionBtn.addEventListener('click', () => {
+      if (isReadOnly) return;
+      startMicToText(questionInput, micQuestionBtn);
+    });
+
+    micAttemptBtn.addEventListener('click', () => {
+      if (isReadOnly) return;
+      startMicToText(attemptInput, micAttemptBtn);
+    });
+
+    /* ---- CHANGE B: Turn-Based Voice Conversation ---- */
+    let voiceState = 'idle'; // idle | listening | processing | speaking
+    let voiceTurnNumber = 0; // 0 = not started, 1 = question, 2 = attempt, 3+ = follow-up
+    let voiceQuestionText = '';
+    let voiceAttemptText = '';
+    let voiceConversationLog = []; // Array of { role: 'student'|'tutor', text: string }
+    let voiceRecognition = null;
+    let currentUtterance = null;
+
+    function setVoiceStatus(state) {
+      voiceState = state;
+      const dict = window.APP_TRANSLATIONS[languageSelect.value];
+
+      // Remove all status classes
+      voiceStatus.classList.remove('status-listening', 'status-thinking', 'status-speaking');
+
+      switch (state) {
+        case 'listening':
+          voiceStatus.classList.add('status-listening');
+          voiceStatusText.textContent = dict.voiceListening;
+          break;
+        case 'processing':
+          voiceStatus.classList.add('status-thinking');
+          voiceStatusText.textContent = dict.voiceThinking;
+          break;
+        case 'speaking':
+          voiceStatus.classList.add('status-speaking');
+          voiceStatusText.textContent = dict.voiceSpeaking;
+          break;
+      }
+    }
+
+    function updateVoicePrompt() {
+      const dict = window.APP_TRANSLATIONS[languageSelect.value];
+      if (voiceTurnNumber === 0 || voiceTurnNumber === 1) {
+        voicePrompt.textContent = dict.voiceFirstTurnPrompt;
+      } else if (voiceTurnNumber === 2) {
+        voicePrompt.textContent = dict.voiceSecondTurnPrompt;
+      } else {
+        voicePrompt.textContent = dict.voiceFollowUpPrompt;
+      }
+    }
+
+    function addVoiceBubble(role, text) {
+      const dict = window.APP_TRANSLATIONS[languageSelect.value];
+      const bubble = document.createElement('div');
+      bubble.className = `voice-bubble ${role}`;
+
+      const label = document.createElement('span');
+      label.className = 'voice-bubble-label';
+      label.textContent = role === 'student' ? dict.voiceYouSaid : dict.voiceTutorSaid;
+
+      const content = document.createElement('span');
+      content.textContent = text;
+
+      bubble.appendChild(label);
+      bubble.appendChild(content);
+      voiceTranscript.appendChild(bubble);
+
+      // Auto-scroll to bottom
+      voiceTranscript.scrollTop = voiceTranscript.scrollHeight;
+
+      // Log for history
+      voiceConversationLog.push({ role, text });
+    }
+
+    function startVoiceListening() {
+      if (voiceState !== 'idle' && voiceState !== 'listening') return;
+
+      voiceTurnNumber++;
+      _beginVoiceListening();
+    }
+
+    // Resume listening on the SAME turn (no turn increment) — used for silence restarts
+    function resumeVoiceListening() {
+      _beginVoiceListening();
+    }
+
+    function _beginVoiceListening() {
+      updateVoicePrompt();
+      setVoiceStatus('listening');
+
+      voiceRecognition = new SpeechRecognitionAPI();
+      voiceRecognition.lang = getVoiceLangCode();
+      voiceRecognition.interimResults = false;
+      voiceRecognition.continuous = false;
+      voiceRecognition.maxAlternatives = 1;
+
+      voiceRecognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        handleVoiceResult(transcript);
+      };
+
+      voiceRecognition.onend = () => {
+        // If we're still in listening state (no result came), it timed out
+        if (voiceState === 'listening') {
+          // Auto-restart listening on silence timeout — same turn
+          try {
+            voiceRecognition.start();
+          } catch (e) {
+            resumeVoiceListening();
+          }
+        }
+      };
+
+      voiceRecognition.onerror = (event) => {
+        console.warn('Voice conversation recognition error:', event.error);
+        if (event.error === 'no-speech' && voiceState === 'listening') {
+          // Restart on no-speech — same turn
+          try {
+            voiceRecognition.start();
+          } catch (e) {
+            resumeVoiceListening();
+          }
+        } else if (event.error === 'aborted') {
+          // Intentional abort (e.g., end conversation) — do nothing
+        } else {
+          // For other errors, try to restart after a delay
+          if (voiceState === 'listening') {
+            setTimeout(() => {
+              if (voiceState === 'listening') {
+                resumeVoiceListening();
+              }
+            }, 500);
+          }
+        }
+      };
+
+      try {
+        voiceRecognition.start();
+      } catch (e) {
+        console.error('Failed to start voice recognition:', e);
+      }
+    }
+
+    async function handleVoiceResult(transcript) {
+      setVoiceStatus('processing');
+
+      // Add student bubble
+      addVoiceBubble('student', transcript);
+
+      if (voiceTurnNumber === 1) {
+        // First turn = question
+        voiceQuestionText = transcript;
+        // Don't call API yet — need the attempt first
+        // Immediately go to turn 2 (attempt)
+        setVoiceStatus('listening');
+        startVoiceListening(); // This will increment to turn 2
+        return;
+      }
+
+      if (voiceTurnNumber === 2) {
+        // Second turn = attempt
+        voiceAttemptText = transcript;
+      }
+
+      // For turn 2 and beyond, send to API
+      const question = voiceTurnNumber === 2 ? voiceQuestionText : transcript;
+      const attempt = voiceTurnNumber === 2 ? voiceAttemptText : voiceQuestionText;
+      const language = languageSelect.value;
+
+      try {
+        const response = await fetch('/api/hint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, attempt, language })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'API error');
+        }
+
+        // Add tutor bubble
+        addVoiceBubble('tutor', data.text);
+
+        // Speak the response aloud
+        speakResponse(data.text);
+
+      } catch (err) {
+        console.error('Voice conversation API error:', err);
+        const errorText = err.message || 'Something went wrong';
+        addVoiceBubble('tutor', '⚠️ ' + errorText);
+
+        // Resume listening even after error
+        setVoiceStatus('listening');
+        startVoiceListening();
+      }
+    }
+
+    function speakResponse(text) {
+      if (!speechSynthesisAPI) {
+        // If TTS not available, skip speaking and resume listening
+        setVoiceStatus('listening');
+        startVoiceListening();
+        return;
+      }
+
+      setVoiceStatus('speaking');
+
+      // Cancel any in-progress speech
+      speechSynthesisAPI.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = getVoiceLangCode();
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+
+      // Try to find a matching voice
+      const voices = speechSynthesisAPI.getVoices();
+      const langCode = getVoiceLangCode();
+      const matchedVoice = voices.find(v => v.lang === langCode) ||
+                           voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
+      if (matchedVoice) {
+        utterance.voice = matchedVoice;
+      }
+
+      utterance.onend = () => {
+        currentUtterance = null;
+        if (voiceState === 'speaking') {
+          // Auto-resume listening
+          setVoiceStatus('listening');
+          startVoiceListening();
+        }
+      };
+
+      utterance.onerror = (event) => {
+        console.warn('Speech synthesis error:', event.error);
+        currentUtterance = null;
+        if (voiceState === 'speaking') {
+          setVoiceStatus('listening');
+          startVoiceListening();
+        }
+      };
+
+      currentUtterance = utterance;
+      speechSynthesisAPI.speak(utterance);
+    }
+
+    function startVoiceConversation() {
+      // Stop any mic-to-text that might be active
+      stopMicToText();
+
+      // Reset state
+      voiceTurnNumber = 0;
+      voiceQuestionText = '';
+      voiceAttemptText = '';
+      voiceConversationLog = [];
+      voiceTranscript.innerHTML = '';
+
+      // Show/hide panels
+      voicePanel.classList.remove('hidden');
+      // Optionally hide the form section during voice mode
+      const formSection = document.querySelector('.form-section');
+      if (formSection) formSection.style.display = 'none';
+      responseSection.classList.add('hidden');
+      errorContainer.classList.add('hidden');
+
+      // Show walkie-talkie note if first time
+      const introSeen = localStorage.getItem('voice-mode-intro-seen');
+      if (!introSeen) {
+        const dict = window.APP_TRANSLATIONS[languageSelect.value];
+        document.getElementById('voice-info-text').textContent = dict.voiceWalkieTalkieNote;
+        voiceInfoDismiss.textContent = dict.voiceGotIt;
+        voiceInfoNote.classList.remove('hidden');
+      }
+
+      // Start listening
+      startVoiceListening();
+    }
+
+    function endVoiceConversation() {
+      // Stop recognition
+      if (voiceRecognition) {
+        try { voiceRecognition.abort(); } catch(e) { /* ignore */ }
+        voiceRecognition = null;
+      }
+
+      // Stop speech synthesis
+      if (speechSynthesisAPI) {
+        speechSynthesisAPI.cancel();
+      }
+      currentUtterance = null;
+
+      voiceState = 'idle';
+
+      // Hide voice panel, show form
+      voicePanel.classList.add('hidden');
+      const formSection = document.querySelector('.form-section');
+      if (formSection) formSection.style.display = '';
+
+      // Save voice conversation to history if there were any exchanges
+      if (voiceConversationLog.length > 0) {
+        saveVoiceSessionToHistory();
+      }
+    }
+
+    function saveVoiceSessionToHistory() {
+      const dict = window.APP_TRANSLATIONS[languageSelect.value];
+
+      // Build a text transcript
+      const question = voiceQuestionText || voiceConversationLog.find(e => e.role === 'student')?.text || 'Voice conversation';
+      const attempt = voiceAttemptText || '(spoken attempt)';
+
+      // Find the first tutor response as the "hint"
+      const firstTutorResponse = voiceConversationLog.find(e => e.role === 'tutor');
+      const hint = firstTutorResponse ? firstTutorResponse.text : '';
+
+      // Build full transcript as the "explanation"
+      const fullTranscript = voiceConversationLog.map(entry => {
+        const label = entry.role === 'student' ? dict.voiceYouSaid : dict.voiceTutorSaid;
+        return `${label} ${entry.text}`;
+      }).join('\n\n');
+
+      const newSession = {
+        id: Date.now().toString(),
+        question: '🎙️ ' + question,
+        attempt: attempt,
+        hint: hint,
+        fullExplanation: voiceConversationLog.length > 2 ? fullTranscript : null,
+        hintFeedback: null,
+        explainFeedback: null,
+        timestamp: Date.now()
+      };
+
+      const sessions = getSessions();
+      sessions.unshift(newSession);
+      saveSessions(sessions);
+      currentSessionId = newSession.id;
+
+      renderSidebarHistory();
+      showToast(dict.voiceSessionSaved);
+    }
+
+    // Event listeners
+    voiceConversationBtn.addEventListener('click', startVoiceConversation);
+    voiceEndBtn.addEventListener('click', endVoiceConversation);
+
+    voiceInfoDismiss.addEventListener('click', () => {
+      voiceInfoNote.classList.add('hidden');
+      localStorage.setItem('voice-mode-intro-seen', 'true');
+    });
+
+    // Make voices available (Chrome loads them async)
+    if (speechSynthesisAPI) {
+      speechSynthesisAPI.getVoices();
+      speechSynthesisAPI.onvoiceschanged = () => {
+        speechSynthesisAPI.getVoices();
+      };
+    }
+  }
+
+  /* ============================================================
+     VOICE-AWARE UI UPDATES
+     ============================================================ */
+  // Extend updateUILanguage to include voice translations
+  const originalUpdateUILanguage = updateUILanguage;
+  // We can't easily wrap, so let's just add a secondary updater
+  function updateVoiceUILanguage() {
+    const dict = window.APP_TRANSLATIONS[languageSelect.value];
+    if (!dict) return;
+
+    const voiceConvBtnText = document.getElementById('voice-conversation-btn-text');
+    if (voiceConvBtnText) voiceConvBtnText.textContent = dict.voiceConversationBtn;
+
+    const voiceEndBtnText = document.getElementById('voice-end-btn-text');
+    if (voiceEndBtnText) voiceEndBtnText.textContent = dict.voiceEndBtn;
+
+    // Update mic button tooltips
+    if (micQuestionBtn) micQuestionBtn.setAttribute('aria-label', dict.voiceMicTooltip);
+    if (micAttemptBtn) micAttemptBtn.setAttribute('aria-label', dict.voiceMicTooltip);
+  }
+
+  // Hook into language change
+  languageSelect.addEventListener('change', updateVoiceUILanguage);
+  // Run once on init
+  updateVoiceUILanguage();
+
+  // Extend startNewSession to also handle voice panel cleanup
+  const originalNewSessionBtn = newSessionBtn;
+  const originalNewQuestionBtn = newQuestionBtn;
+
+  // Ensure voice panel is hidden when starting new session
+  function cleanupVoiceOnNewSession() {
+    if (voiceSupported && voicePanel && !voicePanel.classList.contains('hidden')) {
+      // End any active voice conversation
+      if (typeof endVoiceConversation === 'function') {
+        endVoiceConversation();
+      }
+    }
+    // Ensure form section is visible
+    const formSection = document.querySelector('.form-section');
+    if (formSection) formSection.style.display = '';
+  }
+
+  newSessionBtn.addEventListener('click', cleanupVoiceOnNewSession);
+  newQuestionBtn.addEventListener('click', cleanupVoiceOnNewSession);
 });
+
