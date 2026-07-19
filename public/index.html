@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Show Your Work First — Study Tool</title>
+  
+  <!-- Font imports (includes Noto Sans Devanagari fallback) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Kalam:wght@400;700&family=Work+Sans:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- KaTeX Math Rendering support -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Drawer -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2 id="sidebar-title">Tutor Sessions</h2>
+        <button id="new-session-btn" class="btn btn-new" tabindex="0">+ New Question</button>
+      </div>
+      <div class="sidebar-content">
+        <div id="history-list" class="history-list">
+          <!-- Historical sessions are dynamically populated here -->
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <button id="clear-history-btn" class="btn-clear-history" tabindex="0">🗑️ Clear history</button>
+      </div>
+    </aside>
+
+    <!-- Sidebar Backdrop for mobile drawer -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+    <!-- Main Content Area -->
+    <div class="main-wrapper">
+      <!-- Top Navbar -->
+      <header class="top-nav">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Toggle Menu" tabindex="0">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="logo-text" id="logo-text">Show Your Work First</div>
+        
+        <div class="top-nav-actions">
+          <!-- Language Selector Selector Dropdown -->
+          <select id="language-select" class="language-select" aria-label="Select Language" tabindex="0">
+            <option value="en">English</option>
+            <option value="hi">हिन्दी (Hindi)</option>
+            <option value="mr">मराठी (Marathi)</option>
+          </select>
+
+          <!-- Theme Toggle -->
+          <button id="theme-toggle-btn" class="theme-toggle-btn" aria-label="Toggle Theme" tabindex="0">
+            <!-- Svg theme icon (sun or moon) will be injected dynamically -->
+            <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Replaced dynamically by JS -->
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Study Content -->
+      <main class="tutor-container">
+        <div class="card-container">
+          <!-- Read-Only Past Session Banner (visible when loading history) -->
+          <div id="past-session-banner" class="past-session-banner hidden">
+            <span class="past-session-banner-text" id="past-session-banner-text">⚠️ Viewing Past Session (Read-Only)</span>
+            <span class="past-session-banner-badge" id="past-session-banner-badge">History</span>
+          </div>
+
+          <header class="app-header">
+            <h1 id="app-title">Show Your Work First</h1>
+            <p class="subtitle" id="app-subtitle">A patient tutor who helps you *after* you try.</p>
+          </header>
+
+          <!-- Input Form Section -->
+          <section class="form-section">
+            <!-- Question text area -->
+            <div class="input-group">
+              <label for="question-input" class="label-kalam" id="question-label">What is the question/problem?</label>
+              <textarea 
+                id="question-input" 
+                rows="4" 
+                placeholder="Paste or type the question you're solving (e.g. Find the roots of x² - 5x + 6 = 0)..."
+                maxlength="3900"
+                tabindex="0"
+              ></textarea>
+              <div class="meta-row">
+                <span class="error-msg" id="question-error"></span>
+                <span class="char-count" id="question-char-count">0 / 4000</span>
+              </div>
+            </div>
+
+            <!-- Attempt text area -->
+            <div class="input-group attempt-group">
+              <label for="attempt-input" class="label-kalam" id="attempt-label">Show your work (How did you try to solve it?):</label>
+              <textarea 
+                id="attempt-input" 
+                rows="5" 
+                placeholder="Show your attempt. Write at least 25 characters of what you tried or how you started..."
+                maxlength="3900"
+                tabindex="0"
+              ></textarea>
+              
+              <!-- Repositioned attempt stamp (placed below textarea as a separate row) -->
+              <div class="attempt-stamp-row">
+                <div class="attempt-stamp" id="attempt-stamp">
+                  <span class="stamp-text" id="stamp-text">ATTEMPTED ✓</span>
+                </div>
+              </div>
+              
+              <div class="meta-row">
+                <span class="validation-feedback" id="attempt-validation-msg">Write at least 25 characters to unlock help</span>
+                <span class="char-count" id="attempt-char-count">0 / 25</span>
+              </div>
+            </div>
+
+            <!-- Lock and Action row -->
+            <div class="action-row" id="action-row">
+              <button id="get-hint-btn" class="btn btn-primary disabled" disabled tabindex="0">
+                <span class="btn-lock-icon">🔒</span> <span id="get-hint-btn-text">Get a Hint</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- Error Feedback Container -->
+          <section id="error-container" class="error-box hidden">
+            <p id="error-text">Could not reach the tutor right now.</p>
+          </section>
+
+          <!-- Loading Indicator (Pulse Skeleton) -->
+          <div id="tutor-loader" class="loader-box hidden">
+            <div class="skeleton-wrapper">
+              <div class="skeleton-line skeleton-title"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line short"></div>
+            </div>
+            <p class="loader-message font-mono" id="tutor-loader-message">Asking your tutor...</p>
+          </div>
+
+          <!-- Solution / Response Area -->
+          <section id="response-section" class="response-section hidden">
+            <!-- Hint display -->
+            <div class="hint-card feedback-card">
+              <h2 class="label-kalam" id="response-hint-title">Tutor's Nudge</h2>
+              <div class="card-body" id="hint-content">
+                <!-- Hint text will be inserted here -->
+              </div>
+              
+              <!-- Feedback rating triggers -->
+              <div class="feedback-actions" id="hint-feedback">
+                <span class="feedback-label" id="hint-feedback-label">Was this helpful?</span>
+                <button class="feedback-btn thumbs-up" id="hint-thumbs-up" aria-label="Helpful" tabindex="0">👍</button>
+                <button class="feedback-btn thumbs-down" id="hint-thumbs-down" aria-label="Not helpful" tabindex="0">👎</button>
+              </div>
+              
+              <!-- Hidden link to trigger second API call -->
+              <div class="stuck-row" id="stuck-row">
+                <p id="stuck-text">Still stuck? <a href="#" id="show-explain-btn">Show full explanation</a></p>
+              </div>
+            </div>
+
+            <!-- Full explanation loading state (Pulse Skeleton) -->
+            <div id="explain-loader" class="loader-box hidden">
+              <div class="skeleton-wrapper">
+                <div class="skeleton-line skeleton-title"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line short"></div>
+              </div>
+              <p class="loader-message font-mono" id="explain-loader-message">Writing detailed steps...</p>
+            </div>
+
+            <!-- Full explanation display -->
+            <div class="explanation-card feedback-card hidden" id="explanation-card">
+              <h2 class="label-kalam" id="response-explanation-title">Full Step-by-Step Explanation</h2>
+              <div class="card-body" id="explain-content">
+                <!-- Tutor's full explanation will be inserted here -->
+              </div>
+              
+              <!-- Feedback rating triggers -->
+              <div class="feedback-actions" id="explain-feedback">
+                <span class="feedback-label" id="explain-feedback-label">Was this helpful?</span>
+                <button class="feedback-btn thumbs-up" id="explain-thumbs-up" aria-label="Helpful" tabindex="0">👍</button>
+                <button class="feedback-btn thumbs-down" id="explain-thumbs-down" aria-label="Not helpful" tabindex="0">👎</button>
+              </div>
+            </div>
+
+            <!-- New Question button — shown after student has received help -->
+            <div class="new-question-row" id="new-question-row">
+              <button id="new-question-btn" class="btn btn-new-question" tabindex="0">
+                ✏️ <span id="new-question-btn-footer">Ask a New Question</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- Disclaimer Footer inside card -->
+          <footer class="card-footer" id="app-footer">
+            AI-generated hints may contain mistakes — always double-check with your teacher or textbook.
+          </footer>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Toast Notification Wrapper -->
+  <div id="toast-container" class="toast-container"></div>
+  
+  <!-- Scripts -->
+  <script src="translations.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

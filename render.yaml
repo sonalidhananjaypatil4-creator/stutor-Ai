@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: show-your-work-first
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false   # Set this manually in the Render dashboard — never commit the real key
+      - key: NODE_ENV
+        value: production
