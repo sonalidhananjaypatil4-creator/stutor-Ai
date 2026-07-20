@@ -1082,23 +1082,59 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    function vStartListening() {
+    async function vRequestMic() {
+      console.log('[Voice] About to request mic access via getUserMedia');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[Voice] getUserMedia resolved — mic permission granted');
+        stream.getTracks().forEach(t => t.stop());
+        return true;
+      } catch (err) {
+        console.error(`[Voice] getUserMedia rejected: name="${err.name}" message="${err.message}"`);
+        return false;
+      }
+    }
+
+    async function vStartListening() {
       if (vState === VSTATE.SPEAKING) {
         console.log('[Voice] blocked vStartListening while SPEAKING');
         return;
       }
-      vStopRec();                                // kill any stale instance
-      vHidePermWarn();                            // hide any previous permission warning
+      vStopRec();
+      vHidePermWarn();
       vTurn++;
       vUpdatePrompt();
       vClearLive();
 
-      // Show "Starting mic..." BEFORE confirmation — not "Listening..."
+      // Show "Starting mic..." before any mic work
       const d = window.APP_TRANSLATIONS[languageSelect.value];
       voiceStatus.classList.remove('status-listening', 'status-thinking', 'status-speaking');
       voiceStatusText.textContent = 'Starting mic…';
 
-      const inst = new SpeechRecognitionAPI();
+      // ── Step 1: Explicitly request mic permission ──
+      // This triggers the browser's native permission prompt (on HTTPS).
+      // Do this BEFORE creating the SpeechRecognition instance so the
+      // permission state is known and the prompt is user-initiated.
+      const permitted = await vRequestMic();
+      if (!permitted) {
+        voiceStatusText.textContent = 'Mic access denied';
+        vShowPermWarn('Microphone access is required. Please allow microphone access in your browser settings for this site, then click "Start Voice Conversation" again.');
+        vSetState(VSTATE.IDLE);
+        return;
+      }
+
+      // ── Step 2: Create and start SpeechRecognition ──
+      let inst;
+      try {
+        console.log('[Voice] Creating SpeechRecognition instance');
+        inst = new SpeechRecognitionAPI();
+      } catch (e) {
+        console.error(`[Voice] SpeechRecognition constructor threw: name="${e.name}" message="${e.message}"`);
+        vShowPermWarn('Speech recognition is not available in this browser. Try Chrome or Edge on desktop.');
+        vSetState(VSTATE.IDLE);
+        return;
+      }
+
       inst.lang = getVoiceLangCode();
       inst.interimResults = true;
       inst.continuous = false;
@@ -1116,7 +1152,6 @@ document.addEventListener('DOMContentLoaded', () => {
       inst.onstart = () => {
         console.log('[Voice] onstart — recognition confirmed started');
         vSetState(VSTATE.LISTENING);
-        // Start 10-second timeout: if no speech detected, show guidance
         vClearTimeout();
         vTimeoutId = setTimeout(() => {
           if (vState === VSTATE.LISTENING) {
@@ -1128,7 +1163,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       inst.onresult = (ev) => {
-        vClearTimeout(); // cancel timeout on any result
+        vClearTimeout();
         for (let i = 0; i < ev.results.length; i++) {
           const r = ev.results[i];
           const text = r[0].transcript;
@@ -1137,7 +1172,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (vLiveEl) vLiveEl.textContent = '';
             vHandleInput(text);
           } else {
-            // Live caption for interim results
             if (vLiveEl) vLiveEl.textContent = text;
           }
         }
@@ -1153,11 +1187,9 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
         if (ev.error === 'no-speech' && vState === VSTATE.LISTENING) {
-          // Don't restart immediately — let the timeout handle it
           return;
         }
         if (ev.error === 'aborted') return;
-        // Recoverable error — retry
         if (vState === VSTATE.LISTENING) {
           setTimeout(() => { if (vState === VSTATE.LISTENING) vStartListening(); }, 500);
         }
@@ -1165,17 +1197,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       inst.onend = () => {
         console.log(`[Voice] onend (state=${vState})`);
-        // Do NOT restart here — the 10s timeout in onstart handles silence.
-        // Restarting from onend creates a race: vStopRec from the next
-        // listening cycle can trigger this onend again, causing state corruption.
+        // Never restart from onend — the 10s timeout handles silence.
+        // Restarting here creates a race with vStopRec from the next cycle.
       };
 
       vRec = inst;
       try {
+        console.log('[Voice] About to call recognition.start()');
         inst.start();
-        console.log(`[Voice] recognition.start() called  turn=${vTurn}`);
+        console.log(`[Voice] recognition.start() returned without throw  turn=${vTurn}`);
       } catch (e) {
-        console.error('[Voice] recognition.start() threw:', e);
+        console.error(`[Voice] recognition.start() threw: name="${e.name}" message="${e.message}"`);
         vShowPermWarn('Could not start microphone. Check that mic access is allowed in your browser settings.');
         vSetState(VSTATE.IDLE);
       }
