@@ -196,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Headers & Navigation
     document.getElementById('logo-text').textContent = dict.appTitle;
-    document.getElementById('app-title').textContent = dict.appTitle;
     document.getElementById('app-subtitle').textContent = dict.appSubtitle;
     document.getElementById('sidebar-title').textContent = dict.sidebarTitle;
     newSessionBtn.textContent = dict.newQuestionBtn;
@@ -1003,19 +1002,28 @@ document.addEventListener('DOMContentLoaded', () => {
       startMicToText(attemptInput, micAttemptBtn);
     });
 
-    /* ---- CHANGE B: Turn-Based Voice Conversation (Clean State Machine) ---- */
+    /* ---- CHANGE B: Turn-Based Voice Conversation (Fixed State Machine) ---- */
     // ── State ──
     const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking' };
     let vState = VSTATE.IDLE;
-    let vTurn = 0;          // 0=idle, 1=question, 2=attempt, 3+=follow-up
+    let vTurn = 0;
     let vQuestion = '';
     let vAttempt = '';
-    let vLog = [];          // { role, text }
-    let vRec = null;        // current SpeechRecognition instance
-    let vUtter = null;      // current SpeechSynthesisUtterance
+    let vLog = [];
+    let vRec = null;
+    let vUtter = null;
     let vLiveEl = document.getElementById('voice-live-caption-text');
+    let vPermWarn = document.getElementById('voice-permission-warning');
+    let vPermText = document.getElementById('voice-permission-text');
+    let vTimeoutId = null;
 
     // ── UI helpers ──
+    function vShowPermWarn(msg) {
+      if (vPermText) vPermText.textContent = msg;
+      if (vPermWarn) vPermWarn.classList.remove('hidden');
+    }
+    function vHidePermWarn() { if (vPermWarn) vPermWarn.classList.add('hidden'); }
+
     function vSetState(s) {
       vState = s;
       const d = window.APP_TRANSLATIONS[languageSelect.value];
@@ -1033,6 +1041,10 @@ document.addEventListener('DOMContentLoaded', () => {
         voiceStatusText.textContent = 'Ready';
       }
       console.log(`[Voice] State → ${s}  Turn → ${vTurn}`);
+    }
+
+    function vClearTimeout() {
+      if (vTimeoutId) { clearTimeout(vTimeoutId); vTimeoutId = null; }
     }
 
     function vUpdatePrompt() {
@@ -1061,6 +1073,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Recognition management ──
     function vStopRec() {
+      vClearTimeout();
       if (vRec) {
         const old = vRec;
         vRec = null;
@@ -1070,12 +1083,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function vStartListening() {
-      if (vState === VSTATE.SPEAKING) return;   // never listen while speaking
+      if (vState === VSTATE.SPEAKING) {
+        console.log('[Voice] blocked vStartListening while SPEAKING');
+        return;
+      }
       vStopRec();                                // kill any stale instance
+      vHidePermWarn();                            // hide any previous permission warning
       vTurn++;
       vUpdatePrompt();
       vClearLive();
-      vSetState(VSTATE.LISTENING);
+
+      // Show "Starting mic..." BEFORE confirmation — not "Listening..."
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
+      voiceStatus.classList.remove('status-listening', 'status-thinking', 'status-speaking');
+      voiceStatusText.textContent = 'Starting mic…';
 
       const inst = new SpeechRecognitionAPI();
       inst.lang = getVoiceLangCode();
@@ -1083,32 +1104,60 @@ document.addEventListener('DOMContentLoaded', () => {
       inst.continuous = false;
       inst.maxAlternatives = 1;
 
+      // Log all available events
+      inst.onaudiostart = () => console.log('[Voice] onaudiostart');
+      inst.onsoundstart = () => console.log('[Voice] onsoundstart');
+      inst.onspeechstart = () => console.log('[Voice] onspeechstart');
+      inst.onspeechend = () => console.log('[Voice] onspeechend');
+      inst.onsoundend = () => console.log('[Voice] onsoundend');
+      inst.onaudioend = () => console.log('[Voice] onaudioend');
+
+      // onstart confirms recognition actually began
+      inst.onstart = () => {
+        console.log('[Voice] onstart — recognition confirmed started');
+        vSetState(VSTATE.LISTENING);
+        // Start 10-second timeout: if no speech detected, show guidance
+        vClearTimeout();
+        vTimeoutId = setTimeout(() => {
+          if (vState === VSTATE.LISTENING) {
+            console.log('[Voice] TIMEOUT — no speech detected for 10s');
+            voiceStatusText.textContent = 'Didn\'t catch that — tap "End Conversation" and try again';
+            vClearTimeout();
+          }
+        }, 10000);
+      };
+
       inst.onresult = (ev) => {
-        const last = ev.results[ev.results.length - 1];
-        const text = last[0].transcript;
-        if (!last.isFinal) {
-          // Live caption
-          if (vLiveEl) vLiveEl.textContent = text;
-          return;
+        vClearTimeout(); // cancel timeout on any result
+        for (let i = 0; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          const text = r[0].transcript;
+          console.log(`[Voice] onresult  final=${r.isFinal}  "${text}"`);
+          if (r.isFinal) {
+            if (vLiveEl) vLiveEl.textContent = '';
+            vHandleInput(text);
+          } else {
+            // Live caption for interim results
+            if (vLiveEl) vLiveEl.textContent = text;
+          }
         }
-        // Final result
-        if (vLiveEl) vLiveEl.textContent = '';
-        console.log(`[Voice] onresult (final): "${text}"`);
-        vHandleInput(text);
       };
 
       inst.onerror = (ev) => {
+        vClearTimeout();
         console.warn(`[Voice] onerror: "${ev.error}"`);
         if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-          vAddBubble('system', '⚠️ Microphone access denied. Please allow mic access in browser settings and try again.');
-          vEndConversation();
+          vShowPermWarn('Microphone access was denied. Please allow microphone access in your browser settings, then click "End Conversation" and try again.');
+          vAddBubble('system', '⚠️ Microphone access denied — please allow mic access in browser settings.');
+          vSetState(VSTATE.IDLE);
           return;
         }
         if (ev.error === 'no-speech' && vState === VSTATE.LISTENING) {
-          vStartListening(); // fresh instance, same turn won't increment
+          // Don't restart immediately — let the timeout handle it
           return;
         }
         if (ev.error === 'aborted') return;
+        // Recoverable error — retry
         if (vState === VSTATE.LISTENING) {
           setTimeout(() => { if (vState === VSTATE.LISTENING) vStartListening(); }, 500);
         }
@@ -1116,20 +1165,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       inst.onend = () => {
         console.log(`[Voice] onend (state=${vState})`);
-        // In non-continuous mode, onend fires after each utterance.
-        // If we're still LISTENING, no final result arrived → restart same turn.
-        if (vState === VSTATE.LISTENING) {
-          vStartListening(); // creates fresh instance
-        }
+        // Do NOT restart here — the 10s timeout in onstart handles silence.
+        // Restarting from onend creates a race: vStopRec from the next
+        // listening cycle can trigger this onend again, causing state corruption.
       };
 
       vRec = inst;
       try {
         inst.start();
-        console.log(`[Voice] recognition.start()  turn=${vTurn}`);
+        console.log(`[Voice] recognition.start() called  turn=${vTurn}`);
       } catch (e) {
         console.error('[Voice] recognition.start() threw:', e);
-        setTimeout(() => { if (vState === VSTATE.LISTENING) vStartListening(); }, 500);
+        vShowPermWarn('Could not start microphone. Check that mic access is allowed in your browser settings.');
+        vSetState(VSTATE.IDLE);
       }
     }
 
@@ -1150,7 +1198,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const q = vTurn === 2 ? vQuestion : text;
       const a = vTurn === 2 ? vAttempt : vQuestion;
       const lang = languageSelect.value;
-      console.log(`[Voice] → API  q="${q.slice(0,50)}…"  a="${a.slice(0,50)}…"`);
+      console.log(`[Voice] → API  q="${q.slice(0,60)}"  a="${a.slice(0,60)}"`);
 
       fetch('/api/hint', {
         method: 'POST',
@@ -1160,7 +1208,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (!ok) throw new Error(data.error || 'API error');
-        console.log(`[Voice] ← API  "${data.text.slice(0,100)}…"`);
+        console.log(`[Voice] ← API OK  length=${data.text.length}`);
         vAddBubble('tutor', data.text);
         vSpeak(data.text);
       })
@@ -1175,8 +1223,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function vSpeak(text) {
       if (!speechSynthesisAPI) { vStartListening(); return; }
 
-      vStopRec();                          // stop mic while speaking
-      speechSynthesisAPI.cancel();          // cancel any previous speech
+      vStopRec();
+      speechSynthesisAPI.cancel();
 
       vSetState(VSTATE.SPEAKING);
 
@@ -1190,20 +1238,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
       if (mv) u.voice = mv;
 
+      u.onstart = () => console.log('[Voice] utterance.onstart');
       u.onend = () => {
         console.log('[Voice] utterance.onend');
         vUtter = null;
         if (vState === VSTATE.SPEAKING) vStartListening();
       };
-
       u.onerror = (ev) => {
         console.warn('[Voice] utterance.onerror:', ev.error);
         vUtter = null;
         if (vState === VSTATE.SPEAKING) vStartListening();
       };
+      u.onpause = () => console.log('[Voice] utterance.onpause');
+      u.onresume = () => console.log('[Voice] utterance.onresume');
+      u.onmark = (ev) => console.log('[Voice] utterance.onmark:', ev.name);
+      u.onboundary = (ev) => console.log('[Voice] utterance.onboundary:', ev.name, ev.charIndex);
 
       vUtter = u;
-      console.log(`[Voice] speak()  length=${text.length}`);
+      console.log(`[Voice] speechSynthesis.speak()  text.length=${text.length}`);
       speechSynthesisAPI.speak(u);
     }
 
@@ -1213,6 +1265,7 @@ document.addEventListener('DOMContentLoaded', () => {
       vTurn = 0; vQuestion = ''; vAttempt = ''; vLog = [];
       voiceTranscript.innerHTML = '';
       vClearLive();
+      vHidePermWarn();
 
       voicePanel.classList.remove('hidden');
       const fs = document.querySelector('.form-section');
@@ -1229,14 +1282,33 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       console.log('[Voice] === Conversation started ===');
-      vStartListening();
+
+      // Check mic permission status
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'microphone' }).then(result => {
+          console.log('[Voice] navigator.permissions.microphone:', result.state);
+          if (result.state === 'denied') {
+            vShowPermWarn('Microphone access is blocked in your browser settings. Please allow mic access for this site, then refresh and try again.');
+            voiceStatusText.textContent = 'Mic access blocked';
+            return;
+          }
+          vStartListening();
+        }).catch(err => {
+          console.log('[Voice] permissions.query() not supported, proceeding:', err);
+          vStartListening();
+        });
+      } else {
+        vStartListening();
+      }
     }
 
     function vEndConversation() {
       vStopRec();
       if (speechSynthesisAPI) speechSynthesisAPI.cancel();
       vUtter = null;
+      vClearTimeout();
       vSetState(VSTATE.IDLE);
+      vHidePermWarn();
       voicePanel.classList.add('hidden');
       const fs = document.querySelector('.form-section');
       if (fs) fs.style.display = '';

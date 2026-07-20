@@ -1128,6 +1128,26 @@ body.voice-supported .voice-start-row {
   font-style: italic;
 }
 
+/* Voice permission warning */
+.voice-permission-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  animation: fadeIn 0.3s ease;
+}
+
+.voice-permission-warning.hidden {
+  display: none;
+}
+
 /* Live caption (interim speech results) */
 .voice-live-caption {
   display: flex;

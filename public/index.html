@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Kalam:wght@400;700&family=Work+Sans:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
   
   <!-- KaTeX Math Rendering support -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
@@ -79,10 +79,9 @@
             <span class="past-session-banner-badge" id="past-session-banner-badge">History</span>
           </div>
 
-          <header class="app-header">
-            <h1 id="app-title">Show Your Work First</h1>
-            <p class="subtitle" id="app-subtitle">A patient tutor who helps you *after* you try.</p>
-          </header>
+            <header class="app-header">
+              <p class="subtitle" id="app-subtitle">A patient tutor who helps you *after* you try.</p>
+            </header>
 
           <!-- Input Form Section -->
           <section class="form-section">
@@ -183,6 +182,12 @@
 
             <!-- Turn prompt -->
             <div class="voice-prompt" id="voice-prompt">🎤 Ask your question aloud…</div>
+
+            <!-- Permission warning (shown when mic access is denied/blocked) -->
+            <div id="voice-permission-warning" class="voice-permission-warning hidden">
+              <span>⚠️</span>
+              <span id="voice-permission-text">Microphone access is required. Please allow microphone access in your browser settings, then click "Start Voice Conversation" again.</span>
+            </div>
 
             <!-- Live caption (interim results) -->
             <div class="voice-live-caption" id="voice-live-caption">
@@ -306,7 +311,7 @@
   <div id="toast-container" class="toast-container"></div>
   
   <!-- Scripts -->
-  <script src="translations.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="translations.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
