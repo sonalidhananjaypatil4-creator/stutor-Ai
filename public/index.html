@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Kalam:wght@400;700&family=Work+Sans:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2">
   
   <!-- KaTeX Math Rendering support -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
@@ -184,6 +184,12 @@
             <!-- Turn prompt -->
             <div class="voice-prompt" id="voice-prompt">🎤 Ask your question aloud…</div>
 
+            <!-- Live caption (interim results) -->
+            <div class="voice-live-caption" id="voice-live-caption">
+              <span class="voice-live-caption-icon">🎤</span>
+              <span class="voice-live-caption-text" id="voice-live-caption-text"></span>
+            </div>
+
             <!-- Transcript area -->
             <div class="voice-transcript" id="voice-transcript">
               <!-- Chat bubbles will be appended here dynamically -->
@@ -300,7 +306,7 @@
   <div id="toast-container" class="toast-container"></div>
   
   <!-- Scripts -->
-  <script src="translations.js"></script>
-  <script src="app.js"></script>
+  <script src="translations.js?v=2"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

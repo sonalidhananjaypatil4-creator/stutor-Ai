@@ -1003,357 +1003,286 @@ document.addEventListener('DOMContentLoaded', () => {
       startMicToText(attemptInput, micAttemptBtn);
     });
 
-    /* ---- CHANGE B: Turn-Based Voice Conversation ---- */
-    let voiceState = 'idle'; // idle | listening | processing | speaking
-    let voiceTurnNumber = 0; // 0 = not started, 1 = question, 2 = attempt, 3+ = follow-up
-    let voiceQuestionText = '';
-    let voiceAttemptText = '';
-    let voiceConversationLog = []; // Array of { role: 'student'|'tutor', text: string }
-    let voiceRecognition = null;
-    let currentUtterance = null;
+    /* ---- CHANGE B: Turn-Based Voice Conversation (Clean State Machine) ---- */
+    // ── State ──
+    const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking' };
+    let vState = VSTATE.IDLE;
+    let vTurn = 0;          // 0=idle, 1=question, 2=attempt, 3+=follow-up
+    let vQuestion = '';
+    let vAttempt = '';
+    let vLog = [];          // { role, text }
+    let vRec = null;        // current SpeechRecognition instance
+    let vUtter = null;      // current SpeechSynthesisUtterance
+    let vLiveEl = document.getElementById('voice-live-caption-text');
 
-    function setVoiceStatus(state) {
-      voiceState = state;
-      const dict = window.APP_TRANSLATIONS[languageSelect.value];
-
-      // Remove all status classes
+    // ── UI helpers ──
+    function vSetState(s) {
+      vState = s;
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
       voiceStatus.classList.remove('status-listening', 'status-thinking', 'status-speaking');
-
-      switch (state) {
-        case 'listening':
-          voiceStatus.classList.add('status-listening');
-          voiceStatusText.textContent = dict.voiceListening;
-          break;
-        case 'processing':
-          voiceStatus.classList.add('status-thinking');
-          voiceStatusText.textContent = dict.voiceThinking;
-          break;
-        case 'speaking':
-          voiceStatus.classList.add('status-speaking');
-          voiceStatusText.textContent = dict.voiceSpeaking;
-          break;
-      }
-    }
-
-    function updateVoicePrompt() {
-      const dict = window.APP_TRANSLATIONS[languageSelect.value];
-      if (voiceTurnNumber === 0 || voiceTurnNumber === 1) {
-        voicePrompt.textContent = dict.voiceFirstTurnPrompt;
-      } else if (voiceTurnNumber === 2) {
-        voicePrompt.textContent = dict.voiceSecondTurnPrompt;
+      if (s === VSTATE.LISTENING) {
+        voiceStatus.classList.add('status-listening');
+        voiceStatusText.textContent = d.voiceListening;
+      } else if (s === VSTATE.PROCESSING) {
+        voiceStatus.classList.add('status-thinking');
+        voiceStatusText.textContent = d.voiceThinking;
+      } else if (s === VSTATE.SPEAKING) {
+        voiceStatus.classList.add('status-speaking');
+        voiceStatusText.textContent = d.voiceSpeaking;
       } else {
-        voicePrompt.textContent = dict.voiceFollowUpPrompt;
+        voiceStatusText.textContent = 'Ready';
       }
+      console.log(`[Voice] State → ${s}  Turn → ${vTurn}`);
     }
 
-    function addVoiceBubble(role, text) {
-      const dict = window.APP_TRANSLATIONS[languageSelect.value];
-      const bubble = document.createElement('div');
-      bubble.className = `voice-bubble ${role}`;
+    function vUpdatePrompt() {
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
+      voicePrompt.textContent = vTurn <= 1 ? d.voiceFirstTurnPrompt
+                              : vTurn === 2 ? d.voiceSecondTurnPrompt
+                              : d.voiceFollowUpPrompt;
+    }
 
-      const label = document.createElement('span');
-      label.className = 'voice-bubble-label';
-      label.textContent = role === 'student' ? dict.voiceYouSaid : dict.voiceTutorSaid;
-
-      const content = document.createElement('span');
-      content.textContent = text;
-
-      bubble.appendChild(label);
-      bubble.appendChild(content);
-      voiceTranscript.appendChild(bubble);
-
-      // Auto-scroll to bottom
+    function vAddBubble(role, text) {
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
+      const b = document.createElement('div');
+      b.className = `voice-bubble ${role}`;
+      const l = document.createElement('span');
+      l.className = 'voice-bubble-label';
+      l.textContent = role === 'student' ? d.voiceYouSaid : d.voiceTutorSaid;
+      const c = document.createElement('span');
+      c.textContent = text;
+      b.appendChild(l); b.appendChild(c);
+      voiceTranscript.appendChild(b);
       voiceTranscript.scrollTop = voiceTranscript.scrollHeight;
-
-      // Log for history
-      voiceConversationLog.push({ role, text });
+      vLog.push({ role, text });
     }
 
-    function startVoiceListening() {
-      if (voiceState !== 'idle' && voiceState !== 'listening') return;
+    function vClearLive() { if (vLiveEl) vLiveEl.textContent = ''; }
 
-      voiceTurnNumber++;
-      _beginVoiceListening();
+    // ── Recognition management ──
+    function vStopRec() {
+      if (vRec) {
+        const old = vRec;
+        vRec = null;
+        try { old.abort(); } catch (_) {}
+        console.log('[Voice] recognition.abort()');
+      }
     }
 
-    // Resume listening on the SAME turn (no turn increment) — used for silence restarts
-    function resumeVoiceListening() {
-      _beginVoiceListening();
-    }
+    function vStartListening() {
+      if (vState === VSTATE.SPEAKING) return;   // never listen while speaking
+      vStopRec();                                // kill any stale instance
+      vTurn++;
+      vUpdatePrompt();
+      vClearLive();
+      vSetState(VSTATE.LISTENING);
 
-    function _beginVoiceListening() {
-      updateVoicePrompt();
-      setVoiceStatus('listening');
+      const inst = new SpeechRecognitionAPI();
+      inst.lang = getVoiceLangCode();
+      inst.interimResults = true;
+      inst.continuous = false;
+      inst.maxAlternatives = 1;
 
-      voiceRecognition = new SpeechRecognitionAPI();
-      voiceRecognition.lang = getVoiceLangCode();
-      voiceRecognition.interimResults = false;
-      voiceRecognition.continuous = false;
-      voiceRecognition.maxAlternatives = 1;
-
-      voiceRecognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        handleVoiceResult(transcript);
+      inst.onresult = (ev) => {
+        const last = ev.results[ev.results.length - 1];
+        const text = last[0].transcript;
+        if (!last.isFinal) {
+          // Live caption
+          if (vLiveEl) vLiveEl.textContent = text;
+          return;
+        }
+        // Final result
+        if (vLiveEl) vLiveEl.textContent = '';
+        console.log(`[Voice] onresult (final): "${text}"`);
+        vHandleInput(text);
       };
 
-      voiceRecognition.onend = () => {
-        // If we're still in listening state (no result came), it timed out
-        if (voiceState === 'listening') {
-          // Auto-restart listening on silence timeout — same turn
-          try {
-            voiceRecognition.start();
-          } catch (e) {
-            resumeVoiceListening();
-          }
+      inst.onerror = (ev) => {
+        console.warn(`[Voice] onerror: "${ev.error}"`);
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          vAddBubble('system', '⚠️ Microphone access denied. Please allow mic access in browser settings and try again.');
+          vEndConversation();
+          return;
+        }
+        if (ev.error === 'no-speech' && vState === VSTATE.LISTENING) {
+          vStartListening(); // fresh instance, same turn won't increment
+          return;
+        }
+        if (ev.error === 'aborted') return;
+        if (vState === VSTATE.LISTENING) {
+          setTimeout(() => { if (vState === VSTATE.LISTENING) vStartListening(); }, 500);
         }
       };
 
-      voiceRecognition.onerror = (event) => {
-        console.warn('Voice conversation recognition error:', event.error);
-        if (event.error === 'no-speech' && voiceState === 'listening') {
-          // Restart on no-speech — same turn
-          try {
-            voiceRecognition.start();
-          } catch (e) {
-            resumeVoiceListening();
-          }
-        } else if (event.error === 'aborted') {
-          // Intentional abort (e.g., end conversation) — do nothing
-        } else {
-          // For other errors, try to restart after a delay
-          if (voiceState === 'listening') {
-            setTimeout(() => {
-              if (voiceState === 'listening') {
-                resumeVoiceListening();
-              }
-            }, 500);
-          }
+      inst.onend = () => {
+        console.log(`[Voice] onend (state=${vState})`);
+        // In non-continuous mode, onend fires after each utterance.
+        // If we're still LISTENING, no final result arrived → restart same turn.
+        if (vState === VSTATE.LISTENING) {
+          vStartListening(); // creates fresh instance
         }
       };
 
+      vRec = inst;
       try {
-        voiceRecognition.start();
+        inst.start();
+        console.log(`[Voice] recognition.start()  turn=${vTurn}`);
       } catch (e) {
-        console.error('Failed to start voice recognition:', e);
+        console.error('[Voice] recognition.start() threw:', e);
+        setTimeout(() => { if (vState === VSTATE.LISTENING) vStartListening(); }, 500);
       }
     }
 
-    async function handleVoiceResult(transcript) {
-      setVoiceStatus('processing');
+    // ── Input handling ──
+    function vHandleInput(text) {
+      vSetState(VSTATE.PROCESSING);
+      vAddBubble('student', text);
 
-      // Add student bubble
-      addVoiceBubble('student', transcript);
-
-      if (voiceTurnNumber === 1) {
-        // First turn = question
-        voiceQuestionText = transcript;
-        // Don't call API yet — need the attempt first
-        // Immediately go to turn 2 (attempt)
-        setVoiceStatus('listening');
-        startVoiceListening(); // This will increment to turn 2
+      if (vTurn === 1) {
+        vQuestion = text;
+        console.log(`[Voice] Turn 1 done — question stored`);
+        vStartListening(); // goes to turn 2
         return;
       }
 
-      if (voiceTurnNumber === 2) {
-        // Second turn = attempt
-        voiceAttemptText = transcript;
-      }
+      if (vTurn === 2) vAttempt = text;
 
-      // For turn 2 and beyond, send to API
-      const question = voiceTurnNumber === 2 ? voiceQuestionText : transcript;
-      const attempt = voiceTurnNumber === 2 ? voiceAttemptText : voiceQuestionText;
-      const language = languageSelect.value;
+      const q = vTurn === 2 ? vQuestion : text;
+      const a = vTurn === 2 ? vAttempt : vQuestion;
+      const lang = languageSelect.value;
+      console.log(`[Voice] → API  q="${q.slice(0,50)}…"  a="${a.slice(0,50)}…"`);
 
-      try {
-        const response = await fetch('/api/hint', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question, attempt, language })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'API error');
-        }
-
-        // Add tutor bubble
-        addVoiceBubble('tutor', data.text);
-
-        // Speak the response aloud
-        speakResponse(data.text);
-
-      } catch (err) {
-        console.error('Voice conversation API error:', err);
-        const errorText = err.message || 'Something went wrong';
-        addVoiceBubble('tutor', '⚠️ ' + errorText);
-
-        // Resume listening even after error
-        setVoiceStatus('listening');
-        startVoiceListening();
-      }
+      fetch('/api/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, attempt: a, language: lang })
+      })
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'API error');
+        console.log(`[Voice] ← API  "${data.text.slice(0,100)}…"`);
+        vAddBubble('tutor', data.text);
+        vSpeak(data.text);
+      })
+      .catch(err => {
+        console.error('[Voice] API error:', err);
+        vAddBubble('tutor', '⚠️ ' + (err.message || 'Something went wrong'));
+        vStartListening();
+      });
     }
 
-    function speakResponse(text) {
-      if (!speechSynthesisAPI) {
-        // If TTS not available, skip speaking and resume listening
-        setVoiceStatus('listening');
-        startVoiceListening();
-        return;
-      }
+    // ── Speech synthesis ──
+    function vSpeak(text) {
+      if (!speechSynthesisAPI) { vStartListening(); return; }
 
-      setVoiceStatus('speaking');
+      vStopRec();                          // stop mic while speaking
+      speechSynthesisAPI.cancel();          // cancel any previous speech
 
-      // Cancel any in-progress speech
-      speechSynthesisAPI.cancel();
+      vSetState(VSTATE.SPEAKING);
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = getVoiceLangCode();
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = getVoiceLangCode();
+      u.rate = 0.95;
+      u.pitch = 1;
 
-      // Try to find a matching voice
       const voices = speechSynthesisAPI.getVoices();
-      const langCode = getVoiceLangCode();
-      const matchedVoice = voices.find(v => v.lang === langCode) ||
-                           voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
-      if (matchedVoice) {
-        utterance.voice = matchedVoice;
-      }
+      const lc = getVoiceLangCode();
+      const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
+      if (mv) u.voice = mv;
 
-      utterance.onend = () => {
-        currentUtterance = null;
-        if (voiceState === 'speaking') {
-          // Auto-resume listening
-          setVoiceStatus('listening');
-          startVoiceListening();
-        }
+      u.onend = () => {
+        console.log('[Voice] utterance.onend');
+        vUtter = null;
+        if (vState === VSTATE.SPEAKING) vStartListening();
       };
 
-      utterance.onerror = (event) => {
-        console.warn('Speech synthesis error:', event.error);
-        currentUtterance = null;
-        if (voiceState === 'speaking') {
-          setVoiceStatus('listening');
-          startVoiceListening();
-        }
+      u.onerror = (ev) => {
+        console.warn('[Voice] utterance.onerror:', ev.error);
+        vUtter = null;
+        if (vState === VSTATE.SPEAKING) vStartListening();
       };
 
-      currentUtterance = utterance;
-      speechSynthesisAPI.speak(utterance);
+      vUtter = u;
+      console.log(`[Voice] speak()  length=${text.length}`);
+      speechSynthesisAPI.speak(u);
     }
 
-    function startVoiceConversation() {
-      // Stop any mic-to-text that might be active
+    // ── Public entry points ──
+    function vStartConversation() {
       stopMicToText();
-
-      // Reset state
-      voiceTurnNumber = 0;
-      voiceQuestionText = '';
-      voiceAttemptText = '';
-      voiceConversationLog = [];
+      vTurn = 0; vQuestion = ''; vAttempt = ''; vLog = [];
       voiceTranscript.innerHTML = '';
+      vClearLive();
 
-      // Show/hide panels
       voicePanel.classList.remove('hidden');
-      // Optionally hide the form section during voice mode
-      const formSection = document.querySelector('.form-section');
-      if (formSection) formSection.style.display = 'none';
+      const fs = document.querySelector('.form-section');
+      if (fs) fs.style.display = 'none';
       responseSection.classList.add('hidden');
       errorContainer.classList.add('hidden');
 
-      // Show walkie-talkie note if first time
-      const introSeen = localStorage.getItem('voice-mode-intro-seen');
-      if (!introSeen) {
-        const dict = window.APP_TRANSLATIONS[languageSelect.value];
-        document.getElementById('voice-info-text').textContent = dict.voiceWalkieTalkieNote;
-        voiceInfoDismiss.textContent = dict.voiceGotIt;
+      const seen = localStorage.getItem('voice-mode-intro-seen');
+      if (!seen) {
+        const d = window.APP_TRANSLATIONS[languageSelect.value];
+        document.getElementById('voice-info-text').textContent = d.voiceWalkieTalkieNote;
+        voiceInfoDismiss.textContent = d.voiceGotIt;
         voiceInfoNote.classList.remove('hidden');
       }
 
-      // Start listening
-      startVoiceListening();
+      console.log('[Voice] === Conversation started ===');
+      vStartListening();
     }
 
-    function endVoiceConversation() {
-      // Stop recognition
-      if (voiceRecognition) {
-        try { voiceRecognition.abort(); } catch(e) { /* ignore */ }
-        voiceRecognition = null;
-      }
-
-      // Stop speech synthesis
-      if (speechSynthesisAPI) {
-        speechSynthesisAPI.cancel();
-      }
-      currentUtterance = null;
-
-      voiceState = 'idle';
-
-      // Hide voice panel, show form
+    function vEndConversation() {
+      vStopRec();
+      if (speechSynthesisAPI) speechSynthesisAPI.cancel();
+      vUtter = null;
+      vSetState(VSTATE.IDLE);
       voicePanel.classList.add('hidden');
-      const formSection = document.querySelector('.form-section');
-      if (formSection) formSection.style.display = '';
-
-      // Save voice conversation to history if there were any exchanges
-      if (voiceConversationLog.length > 0) {
-        saveVoiceSessionToHistory();
-      }
+      const fs = document.querySelector('.form-section');
+      if (fs) fs.style.display = '';
+      console.log('[Voice] === Conversation ended ===');
+      if (vLog.length > 0) vSaveSession();
     }
 
-    function saveVoiceSessionToHistory() {
-      const dict = window.APP_TRANSLATIONS[languageSelect.value];
+    function vSaveSession() {
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
+      const q = vQuestion || vLog.find(e => e.role === 'student')?.text || 'Voice conversation';
+      const a = vAttempt || '(spoken attempt)';
+      const firstTutor = vLog.find(e => e.role === 'tutor');
+      const hint = firstTutor ? firstTutor.text : '';
+      const transcript = vLog.map(e => `${e.role === 'student' ? d.voiceYouSaid : d.voiceTutorSaid} ${e.text}`).join('\n\n');
 
-      // Build a text transcript
-      const question = voiceQuestionText || voiceConversationLog.find(e => e.role === 'student')?.text || 'Voice conversation';
-      const attempt = voiceAttemptText || '(spoken attempt)';
-
-      // Find the first tutor response as the "hint"
-      const firstTutorResponse = voiceConversationLog.find(e => e.role === 'tutor');
-      const hint = firstTutorResponse ? firstTutorResponse.text : '';
-
-      // Build full transcript as the "explanation"
-      const fullTranscript = voiceConversationLog.map(entry => {
-        const label = entry.role === 'student' ? dict.voiceYouSaid : dict.voiceTutorSaid;
-        return `${label} ${entry.text}`;
-      }).join('\n\n');
-
-      const newSession = {
+      const sess = {
         id: Date.now().toString(),
-        question: '🎙️ ' + question,
-        attempt: attempt,
-        hint: hint,
-        fullExplanation: voiceConversationLog.length > 2 ? fullTranscript : null,
-        hintFeedback: null,
-        explainFeedback: null,
+        question: '🎙️ ' + q,
+        attempt: a,
+        hint,
+        fullExplanation: vLog.length > 2 ? transcript : null,
+        hintFeedback: null, explainFeedback: null,
         timestamp: Date.now()
       };
-
       const sessions = getSessions();
-      sessions.unshift(newSession);
+      sessions.unshift(sess);
       saveSessions(sessions);
-      currentSessionId = newSession.id;
-
+      currentSessionId = sess.id;
       renderSidebarHistory();
-      showToast(dict.voiceSessionSaved);
+      showToast(d.voiceSessionSaved);
     }
 
-    // Event listeners
-    voiceConversationBtn.addEventListener('click', startVoiceConversation);
-    voiceEndBtn.addEventListener('click', endVoiceConversation);
-
+    // ── Event listeners ──
+    voiceConversationBtn.addEventListener('click', vStartConversation);
+    voiceEndBtn.addEventListener('click', vEndConversation);
     voiceInfoDismiss.addEventListener('click', () => {
       voiceInfoNote.classList.add('hidden');
       localStorage.setItem('voice-mode-intro-seen', 'true');
     });
 
-    // Make voices available (Chrome loads them async)
+    // Pre-load voices
     if (speechSynthesisAPI) {
       speechSynthesisAPI.getVoices();
-      speechSynthesisAPI.onvoiceschanged = () => {
-        speechSynthesisAPI.getVoices();
-      };
+      speechSynthesisAPI.onvoiceschanged = () => speechSynthesisAPI.getVoices();
     }
+
   }
 
   /* ============================================================
@@ -1389,9 +1318,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Ensure voice panel is hidden when starting new session
   function cleanupVoiceOnNewSession() {
     if (voiceSupported && voicePanel && !voicePanel.classList.contains('hidden')) {
-      // End any active voice conversation
-      if (typeof endVoiceConversation === 'function') {
-        endVoiceConversation();
+      if (typeof vEndConversation === 'function') {
+        vEndConversation();
       }
     }
     // Ensure form section is visible
