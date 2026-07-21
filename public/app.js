@@ -1253,10 +1253,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Speech synthesis ──
     function vSpeak(text) {
-      if (!speechSynthesisAPI) { vStartListening(); return; }
+      if (!speechSynthesisAPI) {
+        console.log('[Voice] speechSynthesisAPI not available — skipping speak, resuming listening');
+        vStartListening(); return;
+      }
 
       vStopRec();
-      speechSynthesisAPI.cancel();
 
       vSetState(VSTATE.SPEAKING);
 
@@ -1265,30 +1267,55 @@ document.addEventListener('DOMContentLoaded', () => {
       u.rate = 0.95;
       u.pitch = 1;
 
-      const voices = speechSynthesisAPI.getVoices();
-      const lc = getVoiceLangCode();
-      const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
-      if (mv) u.voice = mv;
+      // ── Voice loading with retry ──
+      // Chrome sometimes returns [] for getVoices() even after voiceschanged.
+      // Try immediately; if empty, schedule a re-try after a short delay.
+      const trySpeak = (attempt) => {
+        const voices = speechSynthesisAPI.getVoices();
+        const lc = getVoiceLangCode();
+        const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
+        if (mv) u.voice = mv;
+        console.log(`[Voice] voices loaded=${voices.length}  matched=${mv ? mv.name : 'none (using default)'}`);
 
-      u.onstart = () => console.log('[Voice] utterance.onstart');
-      u.onend = () => {
-        console.log('[Voice] utterance.onend');
-        vUtter = null;
-        if (vState === VSTATE.SPEAKING) vStartListening();
-      };
-      u.onerror = (ev) => {
-        console.warn('[Voice] utterance.onerror:', ev.error);
-        vUtter = null;
-        if (vState === VSTATE.SPEAKING) vStartListening();
-      };
-      u.onpause = () => console.log('[Voice] utterance.onpause');
-      u.onresume = () => console.log('[Voice] utterance.onresume');
-      u.onmark = (ev) => console.log('[Voice] utterance.onmark:', ev.name);
-      u.onboundary = (ev) => console.log('[Voice] utterance.onboundary:', ev.name, ev.charIndex);
+        u.onstart = () => console.log('[Voice] utterance.onstart');
+        u.onend = () => {
+          console.log('[Voice] utterance.onend');
+          vUtter = null;
+          if (vState === VSTATE.SPEAKING) vStartListening();
+        };
+        u.onerror = (ev) => {
+          console.warn('[Voice] utterance.onerror:', ev.error);
+          vUtter = null;
+          if (vState === VSTATE.SPEAKING) vStartListening();
+        };
+        u.onpause = () => console.log('[Voice] utterance.onpause');
+        u.onresume = () => console.log('[Voice] utterance.onresume');
+        u.onmark = (ev) => console.log('[Voice] utterance.onmark:', ev.name);
+        u.onboundary = (ev) => console.log('[Voice] utterance.onboundary:', ev.name, ev.charIndex);
 
-      vUtter = u;
-      console.log(`[Voice] speechSynthesis.speak()  text.length=${text.length}`);
-      speechSynthesisAPI.speak(u);
+        vUtter = u;
+        console.log(`[Voice] Speaking response: "${text.slice(0, 120)}..."`);
+
+        // Chrome bug workaround: cancel() then speak() on the same call stack
+        // can cause the new utterance to be cancelled. We already called
+        // cancel() above, so speak() on the next microtask.
+        setTimeout(() => {
+          try {
+            speechSynthesisAPI.speak(u);
+            console.log(`[Voice] speechSynthesis.speak() called  text.length=${text.length}`);
+          } catch (e) {
+            console.error(`[Voice] speechSynthesis.speak() threw: ${e.name} ${e.message}`);
+            vUtter = null;
+            if (vState === VSTATE.SPEAKING) vStartListening();
+          }
+        }, 0);
+      };
+
+      // Cancel any previous speech BEFORE the microtask delay
+      speechSynthesisAPI.cancel();
+      console.log('[Voice] speechSynthesis.cancel() called');
+
+      trySpeak(1);
     }
 
     // ── Public entry points ──
