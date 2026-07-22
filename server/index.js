@@ -58,7 +58,7 @@ function validateInputs(req, res, next) {
 
 // Calls Google's Gemini API with x-goog-api-key header authentication
 async function callGemini(systemPrompt, userPrompt) {
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
   
   const response = await fetch(url, {
     method: "POST",
