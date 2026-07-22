@@ -1456,7 +1456,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
             .then(({ ok, data }) => {
-              if (!ok) throw new Error(data.error || 'API error');
+              if (!ok) throw new Error(data.message || data.error || 'API error');
               vAddBubble('tutor', data.text);
               vDeepenData = data.text;
               vSpeak(data.text);
@@ -1483,7 +1483,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
-        if (!ok) throw new Error(data.error || 'API error');
+        if (!ok) throw new Error(data.message || data.error || 'API error');
         console.log(`[Voice] ← API OK  length=${data.text.length}`);
         vDeepenData = null;
         vAddBubble('tutor', data.text);
@@ -1675,7 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
-        if (!ok) throw new Error(data.error || 'API error');
+        if (!ok) throw new Error(data.message || data.error || 'API error');
         vAddBubble('tutor', data.text);
         vDeepenData = data.text;
         vSpeak(data.text);
