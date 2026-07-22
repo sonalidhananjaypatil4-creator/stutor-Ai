@@ -774,10 +774,41 @@ document.addEventListener('DOMContentLoaded', () => {
   explainThumbsDown.addEventListener('click', () => registerFeedbackRating('explain', 'unhelpful'));
 
   /* ============================================================
+     RATE-LIMIT THROTTLE
+     ============================================================ */
+  let lastSubmitTime = 0;
+  const THROTTLE_MS = 3000;
+
+  function canSubmit() {
+    const now = Date.now();
+    if (now - lastSubmitTime < THROTTLE_MS) {
+      const wait = ((THROTTLE_MS - (now - lastSubmitTime)) / 1000).toFixed(1);
+      return { ok: false, message: `Please wait ${wait}s before asking again.` };
+    }
+    lastSubmitTime = now;
+    return { ok: true };
+  }
+
+  function showThrottleMessage(msg) {
+    const prev = errorText.textContent;
+    errorText.textContent = msg;
+    errorContainer.classList.remove('hidden');
+    setTimeout(() => {
+      if (errorText.textContent === msg) {
+        errorText.textContent = prev;
+        if (!prev) errorContainer.classList.add('hidden');
+      }
+    }, 3000);
+  }
+
+  /* ============================================================
      API OPERATIONS (HINT & EXPLANATION)
      ============================================================ */
   getHintBtn.addEventListener('click', async () => {
     if (isReadOnly) return;
+
+    const check = canSubmit();
+    if (!check.ok) { showThrottleMessage(check.message); return; }
 
     const dict = window.APP_TRANSLATIONS[languageSelect.value];
 
@@ -817,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || dict.errorTitle);
+        throw new Error(data.message || data.error || dict.errorTitle);
       }
 
       // Display response — extract Mermaid diagram if present
@@ -876,6 +907,9 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     if (isReadOnly) return;
 
+    const check = canSubmit();
+    if (!check.ok) { showThrottleMessage(check.message); return; }
+
     const dict = window.APP_TRANSLATIONS[languageSelect.value];
 
     stuckRow.classList.add('hidden');
@@ -907,7 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || dict.errorTitle);
+        throw new Error(data.message || data.error || dict.errorTitle);
       }
 
       // Display Explanation — extract Mermaid diagram if present
@@ -956,6 +990,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Go Deeper handler ──
   goDeeperBtn.addEventListener('click', async () => {
     if (isReadOnly) return;
+
+    const check = canSubmit();
+    if (!check.ok) { showThrottleMessage(check.message); return; }
+
     const dict = window.APP_TRANSLATIONS[languageSelect.value];
     const prevExplain = explainContent.textContent || '';
     if (!prevExplain.trim()) return;
@@ -975,8 +1013,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || dict.errorTitle);
-
+      if (!response.ok) throw new Error(data.message || data.error || dict.errorTitle);
       const deepenParsed = extractMermaidCode(data.text);
 
       deepenContent.textContent = deepenParsed.cleanText;
