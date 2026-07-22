@@ -1054,6 +1054,16 @@ document.addEventListener('DOMContentLoaded', () => {
                               : d.voiceFollowUpPrompt;
     }
 
+    // Strip markup for speech synthesis (remove mermaid code blocks and LaTeX delimiters)
+    function vStripMarkup(raw) {
+      return raw
+        .replace(/```mermaid[\s\S]*?```/gi, '')
+        .replace(/\$\$[\s\S]*?\$\$/g, '')
+        .replace(/\$([^\$]*)\$/g, '$1')
+        .replace(/```[\s\S]*?```/g, '')
+        .trim();
+    }
+
     function vAddBubble(role, text) {
       const d = window.APP_TRANSLATIONS[languageSelect.value];
       const b = document.createElement('div');
@@ -1062,9 +1072,37 @@ document.addEventListener('DOMContentLoaded', () => {
       l.className = 'voice-bubble-label';
       l.textContent = role === 'student' ? d.voiceYouSaid : d.voiceTutorSaid;
       const c = document.createElement('span');
-      c.textContent = text;
-      b.appendChild(l); b.appendChild(c);
-      voiceTranscript.appendChild(b);
+      c.className = 'voice-bubble-text';
+
+      if (role === 'tutor') {
+        // Parse mermaid code blocks and render math (same as typed flow)
+        const parsed = extractMermaidCode(text);
+        c.textContent = parsed.cleanText;
+        b.appendChild(l); b.appendChild(c);
+        voiceTranscript.appendChild(b);
+
+        // Render KaTeX math in the clean text
+        renderMath(c);
+
+        // Render diagram if mermaid code was found
+        if (parsed.mermaidCode) {
+          const diaContainer = document.createElement('div');
+          diaContainer.className = 'diagram-card voice-bubble-diagram';
+          const diaWrapper = document.createElement('div');
+          diaWrapper.className = 'diagram-wrapper';
+          const diaTarget = document.createElement('div');
+          diaTarget.id = 'voice-diagram-' + (vTurn);
+          diaWrapper.appendChild(diaTarget);
+          diaContainer.appendChild(diaWrapper);
+          voiceTranscript.appendChild(diaContainer);
+          renderDiagram(diaContainer, diaTarget, parsed.mermaidCode, 'voice-diagram-' + (vTurn));
+        }
+      } else {
+        c.textContent = text;
+        b.appendChild(l); b.appendChild(c);
+        voiceTranscript.appendChild(b);
+      }
+
       voiceTranscript.scrollTop = voiceTranscript.scrollHeight;
       vLog.push({ role, text });
     }
@@ -1262,7 +1300,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       vSetState(VSTATE.SPEAKING);
 
-      const u = new SpeechSynthesisUtterance(text);
+      // Strip mermaid code blocks and LaTeX syntax before speaking
+      const speakText = vStripMarkup(text);
+      const u = new SpeechSynthesisUtterance(speakText);
       u.lang = getVoiceLangCode();
       u.rate = 0.95;
       u.pitch = 1;

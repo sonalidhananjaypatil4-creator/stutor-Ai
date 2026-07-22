@@ -1235,6 +1235,13 @@ body.voice-supported .voice-start-row {
 .voice-bubble.student .voice-bubble-label { color: rgba(255,255,255,0.8); }
 .voice-bubble.tutor .voice-bubble-label { color: var(--text-secondary); }
 
+/* Diagram card inside voice transcript */
+.diagram-card.voice-bubble-diagram {
+  margin: 4px 0 12px 0;
+  max-width: 100%;
+  align-self: stretch;
+}
+
 /* End conversation button */
 .voice-end-row {
   display: flex;
