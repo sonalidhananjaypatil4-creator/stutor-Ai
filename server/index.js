@@ -18,7 +18,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 if (!GEMINI_API_KEY) {
   console.warn('WARNING: GEMINI_API_KEY is not defined in the environment.');
@@ -75,7 +75,10 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
         body: JSON.stringify({
           systemInstruction: {
             parts: [{ text: systemPrompt }]
@@ -122,9 +125,9 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
 
     } catch (err) {
       if (attempt === maxRetries) throw err;
-      if (err.message.startsWith('Gemini HTTP')) {
-        // Don't retry on non-429 HTTP errors
-        throw err;
+      const msg = err && err.message ? err.message : '';
+      if (msg.startsWith('Gemini HTTP') && !msg.includes('429')) {
+        throw err; // Don't retry on non-429 HTTP errors
       }
     }
   }
@@ -181,9 +184,12 @@ async function handleGeminiRequest(req, res, systemPrompt, userPrompt) {
       });
     }
 
+    const friendlyMessage = (error && error.message)
+      ? error.message
+      : 'Could not reach the tutor right now.';
     res.status(500).json({
       error: 'internal_error',
-      message: error.message || 'Could not reach the tutor right now.'
+      message: friendlyMessage
     });
   }
 }
