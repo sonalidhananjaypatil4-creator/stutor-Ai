@@ -200,6 +200,13 @@
               <!-- Chat bubbles will be appended here dynamically -->
             </div>
 
+            <!-- Go Deeper button (visible during voice conversation) -->
+            <div class="voice-go-deeper-row hidden" id="voice-go-deeper-row">
+              <button id="voice-go-deeper-btn" class="btn btn-go-deeper" tabindex="0">
+                <span id="voice-go-deeper-btn-text">🔍 Go Deeper</span>
+              </button>
+            </div>
+
             <!-- End Conversation Button -->
             <div class="voice-end-row">
               <button id="voice-end-btn" class="btn btn-end-voice" tabindex="0">
@@ -287,6 +294,41 @@
               <h2 class="label-kalam" id="visual-explanation-explain-title">Visual Explanation</h2>
               <div class="card-body diagram-wrapper">
                 <div id="explain-diagram"></div>
+              </div>
+            </div>
+
+            <!-- Go Deeper button — shown after full explanation -->
+            <div class="go-deeper-row hidden" id="go-deeper-row">
+              <button id="go-deeper-btn" class="btn btn-go-deeper" tabindex="0">
+                <span id="go-deeper-btn-text">🔍 Go Deeper</span>
+              </button>
+            </div>
+
+            <!-- Deeper explanation loading state -->
+            <div id="deepen-loader" class="loader-box hidden">
+              <div class="skeleton-wrapper">
+                <div class="skeleton-line skeleton-title"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line short"></div>
+              </div>
+              <p class="loader-message font-mono" id="deepen-loader-message">Going deeper...</p>
+            </div>
+
+            <!-- Deeper explanation display -->
+            <div class="deeper-card feedback-card hidden" id="deeper-card">
+              <h2 class="label-kalam" id="response-deeper-title">Going Deeper</h2>
+              <div class="card-body" id="deepen-content">
+                <!-- Deeper explanation inserted here -->
+              </div>
+            </div>
+
+            <!-- Deeper Visual Diagram -->
+            <div id="deepen-diagram-container" class="diagram-card feedback-card hidden">
+              <h2 class="label-kalam" id="visual-explanation-deepen-title">Visual Explanation</h2>
+              <div class="card-body diagram-wrapper">
+                <div id="deepen-diagram"></div>
               </div>
             </div>
 

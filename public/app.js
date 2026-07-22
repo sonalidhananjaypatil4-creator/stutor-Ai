@@ -57,6 +57,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const explainDiagramContainer = document.getElementById('explain-diagram-container');
   const explainDiagram = document.getElementById('explain-diagram');
 
+  // Go Deeper Elements
+  const goDeeperRow = document.getElementById('go-deeper-row');
+  const goDeeperBtn = document.getElementById('go-deeper-btn');
+  const goDeeperBtnText = document.getElementById('go-deeper-btn-text');
+  const deepenLoader = document.getElementById('deepen-loader');
+  const deeperCard = document.getElementById('deeper-card');
+  const deepenContent = document.getElementById('deepen-content');
+  const deepenDiagramContainer = document.getElementById('deepen-diagram-container');
+  const deepenDiagram = document.getElementById('deepen-diagram');
+
+  // Voice Go Deeper
+  const voiceGoDeeperRow = document.getElementById('voice-go-deeper-row');
+  const voiceGoDeeperBtn = document.getElementById('voice-go-deeper-btn');
+
   // Toast Container
   const toastContainer = document.getElementById('toast-container');
 
@@ -69,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let isReadOnly = false;
   let currentHintMermaidCode = null;
   let currentExplainMermaidCode = null;
+  let currentDeepenMermaidCode = null;
 
   /* ============================================================
      THEME MANAGEMENT
@@ -224,8 +239,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Visual Explanation titles
     const visualHintTitle = document.getElementById('visual-explanation-hint-title');
     const visualExplainTitle = document.getElementById('visual-explanation-explain-title');
+    const visualDeepenTitle = document.getElementById('visual-explanation-deepen-title');
     if (visualHintTitle) visualHintTitle.textContent = dict.visualExplanation;
     if (visualExplainTitle) visualExplainTitle.textContent = dict.visualExplanation;
+    if (visualDeepenTitle) visualDeepenTitle.textContent = dict.visualDeeperTitle;
+
+    // Deeper explanation titles
+    const deeperTitle = document.getElementById('response-deeper-title');
+    if (deeperTitle) deeperTitle.textContent = dict.responseDeeperTitle;
+    goDeeperBtnText.textContent = dict.goDeeperBtn;
+
+    // Deeper loader message
+    const deepenLoaderMsg = document.getElementById('deepen-loader-message');
+    if (deepenLoaderMsg) deepenLoaderMsg.textContent = 'Going deeper...';
 
     // Stuck link replacement (preserving anchor click listener)
     const stuckTextEl = document.getElementById('stuck-text');
@@ -571,10 +597,10 @@ document.addEventListener('DOMContentLoaded', () => {
       renderMath(explainContent);
       explanationCard.classList.remove('hidden');
       stuckRow.classList.add('hidden');
-      
+
       currentExplainMermaidCode = explainParsed.mermaidCode;
       renderDiagram(explainDiagramContainer, explainDiagram, explainParsed.mermaidCode, 'explain-diagram');
-      
+
       // Render ratings for explanation (disabled in read-only mode)
       disableFeedbackButtons('explain');
       highlightFeedbackButtons('explain', session.explainFeedback);
@@ -587,9 +613,29 @@ document.addEventListener('DOMContentLoaded', () => {
       explainDiagram.innerHTML = '';
     }
 
+    // Restore deepen explanation
+    if (session.deepenExplanation) {
+      const deepenParsed = extractMermaidCode(session.deepenExplanation);
+      deepenContent.textContent = deepenParsed.cleanText;
+      renderMath(deepenContent);
+      deeperCard.classList.remove('hidden');
+      goDeeperRow.classList.add('hidden');
+
+      currentDeepenMermaidCode = deepenParsed.mermaidCode;
+      renderDiagram(deepenDiagramContainer, deepenDiagram, deepenParsed.mermaidCode, 'deepen-diagram');
+    } else {
+      currentDeepenMermaidCode = null;
+      deepenContent.textContent = '';
+      deeperCard.classList.add('hidden');
+      goDeeperRow.classList.remove('hidden');
+      deepenDiagramContainer.classList.add('hidden');
+      deepenDiagram.innerHTML = '';
+    }
+
     // Hide loaders & errors
     tutorLoader.classList.add('hidden');
     explainLoader.classList.add('hidden');
+    deepenLoader.classList.add('hidden');
     errorContainer.classList.add('hidden');
 
     // Rerender sidebar to show active item highlight
@@ -615,12 +661,16 @@ document.addEventListener('DOMContentLoaded', () => {
     tutorLoader.classList.add('hidden');
     explainLoader.classList.add('hidden');
     explanationCard.classList.add('hidden');
+    deeperCard.classList.add('hidden');
+    deepenLoader.classList.add('hidden');
+    goDeeperRow.classList.add('hidden');
     stuckRow.classList.remove('hidden');
     actionRow.classList.remove('hidden');
 
     // Clear old responses text
     hintContent.textContent = '';
     explainContent.textContent = '';
+    deepenContent.textContent = '';
     errorText.textContent = '';
 
     // Enable feedback buttons for fresh sessions
@@ -735,6 +785,12 @@ document.addEventListener('DOMContentLoaded', () => {
     errorContainer.classList.add('hidden');
     responseSection.classList.add('hidden');
     explanationCard.classList.add('hidden');
+    deeperCard.classList.add('hidden');
+    deepenLoader.classList.add('hidden');
+    goDeeperRow.classList.add('hidden');
+    currentDeepenMermaidCode = null;
+    deepenDiagramContainer.classList.add('hidden');
+    deepenDiagram.innerHTML = '';
     
     // Reset feedback ratings visually
     resetFeedbackButtonsVisuals('hint');
@@ -826,6 +882,15 @@ document.addEventListener('DOMContentLoaded', () => {
     errorContainer.classList.add('hidden');
     explainLoader.classList.remove('hidden');
 
+    // Reset deeper content when requesting new explanation
+    deeperCard.classList.add('hidden');
+    deepenLoader.classList.add('hidden');
+    goDeeperRow.classList.add('hidden');
+    currentDeepenMermaidCode = null;
+    deepenDiagramContainer.classList.add('hidden');
+    deepenDiagram.innerHTML = '';
+    deepenContent.textContent = '';
+
     const question = questionInput.value;
     const attempt = attemptInput.value;
     const language = languageSelect.value;
@@ -877,9 +942,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      // Show Go Deeper button after explanation
+      goDeeperRow.classList.remove('hidden');
+
     } catch (err) {
       explainLoader.classList.add('hidden');
       stuckRow.classList.remove('hidden');
+      errorText.textContent = err.message || dict.errorTitle;
+      errorContainer.classList.remove('hidden');
+    }
+  });
+
+  // ── Go Deeper handler ──
+  goDeeperBtn.addEventListener('click', async () => {
+    if (isReadOnly) return;
+    const dict = window.APP_TRANSLATIONS[languageSelect.value];
+    const prevExplain = explainContent.textContent || '';
+    if (!prevExplain.trim()) return;
+
+    goDeeperRow.classList.add('hidden');
+    deepenLoader.classList.remove('hidden');
+
+    const question = questionInput.value;
+    const attempt = attemptInput.value;
+    const language = languageSelect.value;
+
+    try {
+      const response = await fetch('/api/deepen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, attempt, previousExplanation: prevExplain, language })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || dict.errorTitle);
+
+      const deepenParsed = extractMermaidCode(data.text);
+
+      deepenContent.textContent = deepenParsed.cleanText;
+      renderMath(deepenContent);
+      deepenLoader.classList.add('hidden');
+      deeperCard.classList.remove('hidden');
+
+      currentDeepenMermaidCode = deepenParsed.mermaidCode;
+      if (deepenParsed.mermaidCode) {
+        renderDiagram(deepenDiagramContainer, deepenDiagram, deepenParsed.mermaidCode, 'deepen-diagram');
+      } else {
+        deepenDiagramContainer.classList.add('hidden');
+        deepenDiagram.innerHTML = '';
+      }
+
+      // Save deepen to session
+      if (currentSessionId) {
+        const sessions = getSessions();
+        const sessionIndex = sessions.findIndex(s => s.id === currentSessionId);
+        if (sessionIndex !== -1) {
+          sessions[sessionIndex].deepenExplanation = data.text;
+          saveSessions(sessions);
+        }
+      }
+
+      // Scroll to show the new content
+      deeperCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    } catch (err) {
+      deepenLoader.classList.add('hidden');
+      goDeeperRow.classList.remove('hidden');
       errorText.textContent = err.message || dict.errorTitle;
       errorContainer.classList.remove('hidden');
     }
@@ -1012,6 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let vLog = [];
     let vRec = null;
     let vUtter = null;
+    let vDeepenData = null;
     let vLiveEl = document.getElementById('voice-live-caption-text');
     let vPermWarn = document.getElementById('voice-permission-warning');
     let vPermText = document.getElementById('voice-permission-text');
@@ -1265,6 +1394,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (vTurn === 2) vAttempt = text;
 
+      // On turn 3+, check for "go deeper" verbal trigger
+      if (vTurn > 2 && vDeepenData === null) {
+        const lower = text.toLowerCase();
+        const deepenTriggers = ['tell me more', 'go deeper', 'explain more', 'i want to understand better', 'more depth', 'dive deeper', 'elaborate', 'can you go deeper', 'more detail', 'i need more'];
+        const isDeepen = deepenTriggers.some(t => lower.includes(t));
+        if (isDeepen && vQuestion) {
+          console.log('[Voice] Verbal trigger: go deeper detected');
+          const lastTutor = [...vLog].reverse().find(e => e.role === 'tutor' && !e.text.startsWith('⚠️'));
+          if (lastTutor) {
+            vAddBubble('student', text);
+            vSetState(VSTATE.PROCESSING);
+            voiceStatusText.textContent = 'Going deeper...';
+            const lang = languageSelect.value;
+            fetch('/api/deepen', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                question: vQuestion,
+                attempt: vAttempt || '(spoken attempt)',
+                previousExplanation: lastTutor.text,
+                language: lang
+              })
+            })
+            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(({ ok, data }) => {
+              if (!ok) throw new Error(data.error || 'API error');
+              vAddBubble('tutor', data.text);
+              vDeepenData = data.text;
+              vSpeak(data.text);
+            })
+            .catch(err => {
+              console.error('[Voice] Deepen API error:', err);
+              vAddBubble('tutor', '⚠️ ' + (err.message || 'Could not go deeper'));
+              vStartListening();
+            });
+            return;
+          }
+        }
+      }
+
       const q = vTurn === 2 ? vQuestion : text;
       const a = vTurn === 2 ? vAttempt : vQuestion;
       const lang = languageSelect.value;
@@ -1279,7 +1448,9 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(({ ok, data }) => {
         if (!ok) throw new Error(data.error || 'API error');
         console.log(`[Voice] ← API OK  length=${data.text.length}`);
+        vDeepenData = null;
         vAddBubble('tutor', data.text);
+        voiceGoDeeperRow.classList.remove('hidden');
         vSpeak(data.text);
       })
       .catch(err => {
@@ -1361,10 +1532,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Public entry points ──
     function vStartConversation() {
       stopMicToText();
-      vTurn = 0; vQuestion = ''; vAttempt = ''; vLog = [];
+      vTurn = 0; vQuestion = ''; vAttempt = ''; vLog = []; vDeepenData = null;
       voiceTranscript.innerHTML = '';
       vClearLive();
       vHidePermWarn();
+      voiceGoDeeperRow.classList.add('hidden');
 
       voicePanel.classList.remove('hidden');
       const fs = document.querySelector('.form-section');
@@ -1408,6 +1580,8 @@ document.addEventListener('DOMContentLoaded', () => {
       vClearTimeout();
       vSetState(VSTATE.IDLE);
       vHidePermWarn();
+      voiceGoDeeperRow.classList.add('hidden');
+      vDeepenData = null;
       voicePanel.classList.add('hidden');
       const fs = document.querySelector('.form-section');
       if (fs) fs.style.display = '';
@@ -1429,6 +1603,7 @@ document.addEventListener('DOMContentLoaded', () => {
         attempt: a,
         hint,
         fullExplanation: vLog.length > 2 ? transcript : null,
+        deepenExplanation: vDeepenData,
         hintFeedback: null, explainFeedback: null,
         timestamp: Date.now()
       };
@@ -1439,6 +1614,43 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSidebarHistory();
       showToast(d.voiceSessionSaved);
     }
+
+    // ── Voice Go Deeper ──
+    function vGoDeeper() {
+      // Get the last tutor response text
+      const lastTutor = vLog.filter(e => e.role === 'tutor' && !e.text.startsWith('⚠️')).pop();
+      if (!lastTutor || !vQuestion) return;
+
+      voiceGoDeeperRow.classList.add('hidden');
+      vSetState(VSTATE.PROCESSING);
+      voiceStatusText.textContent = 'Going deeper...';
+
+      const lang = languageSelect.value;
+      fetch('/api/deepen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: vQuestion,
+          attempt: vAttempt || '(spoken attempt)',
+          previousExplanation: lastTutor.text,
+          language: lang
+        })
+      })
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'API error');
+        vAddBubble('tutor', data.text);
+        vDeepenData = data.text;
+        vSpeak(data.text);
+      })
+      .catch(err => {
+        console.error('[Voice] Deepen API error:', err);
+        vAddBubble('tutor', '⚠️ ' + (err.message || 'Could not go deeper'));
+        vStartListening();
+      });
+    }
+
+    voiceGoDeeperBtn.addEventListener('click', vGoDeeper);
 
     // ── Event listeners ──
     voiceConversationBtn.addEventListener('click', vStartConversation);
@@ -1471,6 +1683,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const voiceEndBtnText = document.getElementById('voice-end-btn-text');
     if (voiceEndBtnText) voiceEndBtnText.textContent = dict.voiceEndBtn;
+
+    const voiceGoDeeperBtnText = document.getElementById('voice-go-deeper-btn-text');
+    if (voiceGoDeeperBtnText) voiceGoDeeperBtnText.textContent = dict.goDeeperBtn;
 
     // Update mic button tooltips
     if (micQuestionBtn) micQuestionBtn.setAttribute('aria-label', dict.voiceMicTooltip);

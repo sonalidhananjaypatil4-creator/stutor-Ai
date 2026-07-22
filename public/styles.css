@@ -1275,6 +1275,52 @@ body.voice-supported .voice-start-row {
   transform: translateY(0);
 }
 
+/* Go Deeper button (typed flow) */
+.go-deeper-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+}
+
+.btn-go-deeper {
+  background-color: transparent;
+  color: var(--accent-color);
+  border: 1.5px solid var(--accent-color);
+  font-size: 0.9rem;
+  padding: 8px 20px;
+  cursor: pointer;
+  border-radius: 8px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Work Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.btn-go-deeper:hover {
+  background-color: var(--accent-color);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.btn-go-deeper:active {
+  transform: translateY(0);
+}
+
+/* Go Deeper button (voice flow) */
+.voice-go-deeper-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* Deeper explanation card */
+.deeper-card {
+  margin-top: 20px;
+}
+
 /* Mobile adjustments for voice features */
 @media (max-width: 768px) {
   .voice-panel {

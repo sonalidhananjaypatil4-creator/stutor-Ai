@@ -37,6 +37,9 @@ window.APP_TRANSLATIONS = {
     toastLanguageUpdated: "Language set to English",
     attemptedStamp: "ATTEMPTED ✓",
     visualExplanation: "Visual Explanation",
+    goDeeperBtn: "🔍 Go Deeper",
+    responseDeeperTitle: "Going Deeper",
+    visualDeeperTitle: "Visual Explanation",
     // Voice feature translations
     voiceConversationBtn: "🎙️ Start Voice Conversation",
     voiceEndBtn: "End Conversation",
@@ -91,6 +94,9 @@ window.APP_TRANSLATIONS = {
     toastLanguageUpdated: "भाषा बदलकर हिन्दी कर दी गई है",
     attemptedStamp: "प्रयास किया ✓",
     visualExplanation: "दृश्य स्पष्टीकरण (रेखाचित्र)",
+    goDeeperBtn: "🔍 और गहराई में जाएं",
+    responseDeeperTitle: "गहराई से समझना",
+    visualDeeperTitle: "दृश्य स्पष्टीकरण",
     // Voice feature translations
     voiceConversationBtn: "🎙️ आवाज़ से बात करें",
     voiceEndBtn: "बातचीत समाप्त करें",
@@ -145,6 +151,9 @@ window.APP_TRANSLATIONS = {
     toastLanguageUpdated: "भाषा मराठी मध्ये बदलली गेली आहे",
     attemptedStamp: "प्रयत्न केला ✓",
     visualExplanation: "दृश्य स्पष्टीकरण (आकृती)",
+    goDeeperBtn: "🔍 अधिक सखोल जा",
+    responseDeeperTitle: "सखोल स्पष्टीकरण",
+    visualDeeperTitle: "दृश्य स्पष्टीकरण",
     // Voice feature translations
     voiceConversationBtn: "🎙️ आवाजाने बोला",
     voiceEndBtn: "संभाषण संपवा",
