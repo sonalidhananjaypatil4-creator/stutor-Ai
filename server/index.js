@@ -106,6 +106,7 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
 
       if (!response.ok) {
         const errBody = await response.text();
+        console.error(`[Gemini] HTTP ${response.status} body:`, errBody.substring(0, 500));
         throw new Error(`Gemini HTTP ${response.status}: ${errBody}`);
       }
 
@@ -193,6 +194,45 @@ async function handleGeminiRequest(req, res, systemPrompt, userPrompt) {
     });
   }
 }
+
+// ── Diagnostic endpoint ──
+app.get('/api/check', async (req, res) => {
+  const keyPreview = GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 6) + '...' : 'MISSING';
+  const model = GEMINI_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY ? 'HIDDEN' : 'MISSING'}`;
+
+  console.log(`[Check] Model: ${model}, Key prefix: ${keyPreview}`);
+
+  // Test call with a minimal prompt
+  try {
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const response = await fetch(testUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY || '' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Say OK' }] }],
+        generationConfig: { maxOutputTokens: 10 }
+      })
+    });
+
+    const body = await response.text();
+    let parsed;
+    try { parsed = JSON.parse(body); } catch (e) { parsed = body; }
+
+    console.log(`[Check] Gemini responded with status ${response.status}:`, typeof parsed === 'string' ? parsed.substring(0, 200) : JSON.stringify(parsed).substring(0, 200));
+
+    res.json({
+      status: response.status,
+      ok: response.ok,
+      model,
+      keyPrefix: keyPreview,
+      response: parsed
+    });
+  } catch (err) {
+    console.error('[Check] Error:', err.message);
+    res.status(500).json({ error: err.message, model, keyPrefix: keyPreview });
+  }
+});
 
 // ── Routes ──
 
