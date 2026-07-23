@@ -64,11 +64,23 @@ class GeminiQueue {
 const geminiQueue = new GeminiQueue();
 
 // ── Gemini API call with retry logic and model fallback ──
-const GEMINI_MODELS = [
-  process.env.GEMINI_MODEL || 'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro'
-];
+// Try multiple URL patterns + model combos (different API versions have different quota pools)
+const GEMINI_ENDPOINTS = (process.env.GEMINI_API_VERSION || 'v1beta') === 'v1'
+  ? [
+      `https://generativelanguage.googleapis.com/v1/models/${process.env.GEMINI_MODEL || 'gemini-2.0-flash'}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-lite:generateContent`,
+    ]
+  : [
+      `https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || 'gemini-2.0-flash'}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-lite:generateContent`,
+    ];
 
 async function callGemini(systemPrompt, userPrompt, options = {}) {
   const apiKey = GEMINI_API_KEY;
@@ -77,8 +89,9 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
   const maxRetries = 2;
   let lastError = null;
 
-  for (const model of GEMINI_MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  for (const baseUrl of GEMINI_ENDPOINTS) {
+    const url = baseUrl + '?key=' + encodeURIComponent(apiKey);
+    const modelName = baseUrl.match(/models\/([^:]+)/)?.[1] || 'unknown';
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -104,29 +117,27 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
 
         if (response.status === 429) {
           const body = await response.text().catch(() => '(empty)');
-          console.error(`[Gemini] 429 on ${model}, body:`, body.substring(0, 500));
+          console.error(`[Gemini] 429 on ${modelName}, body:`, body.substring(0, 500));
 
-          // Check if it's a daily quota (not retryable) vs per-minute rate limit
-          const isQuota = body.includes('quota') || body.includes('Quota') || body.includes('QUOTA');
+          const isQuota = /quota/i.test(body);
           if (isQuota || attempt === maxRetries) {
             if (isQuota) {
-              console.error('[Gemini] DAILY QUOTA EXCEEDED — no retry will help');
+              console.error(`[Gemini] QUOTA EXCEEDED on ${modelName}`);
             }
             lastError = new Error(isQuota ? 'DAILY_QUOTA_EXCEEDED' : 'RATE_LIMIT_EXCEEDED');
-            break; // Try next model
+            break;
           }
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-          console.log(`[Gemini] 429 retry ${attempt + 1}/${maxRetries} on ${model} in ${Math.round(delay)}ms`);
+          console.log(`[Gemini] 429 retry ${attempt + 1}/${maxRetries} on ${modelName} in ${Math.round(delay)}ms`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
 
         if (!response.ok) {
           const errBody = await response.text();
-          console.error(`[Gemini] HTTP ${response.status} on ${model}:`, errBody.substring(0, 500));
+          console.error(`[Gemini] HTTP ${response.status} on ${modelName}:`, errBody.substring(0, 500));
           const err = new Error(`Gemini HTTP ${response.status}: ${errBody}`);
           if (response.status === 404 || response.status === 400) {
-            // Model not found or bad request — try next model
             lastError = err;
             break;
           }
@@ -147,27 +158,25 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
       } catch (err) {
         if (attempt === maxRetries) {
           lastError = err;
-          break; // Try next model
+          break;
         }
         const msg = err && err.message ? err.message : '';
         if (msg.startsWith('Gemini HTTP') && !msg.includes('429')) {
           lastError = err;
-          break; // Don't retry non-429 HTTP errors, try next model
+          break;
         }
       }
     }
-    // Model failed. Try next model for quota/rate-limit/model errors.
-    // Throw immediately for auth errors (won't be fixed by a different model).
+
     if (lastError && lastError.message) {
       const m = lastError.message;
-      const isModelOrQuotaError = m.includes('404') || m.includes('400') || m.includes('429') || m === 'DAILY_QUOTA_EXCEEDED' || m === 'RATE_LIMIT_EXCEEDED';
-      if (!isModelOrQuotaError) {
-        throw lastError; // Auth or unknown error — stop here
+      const isEndpointError = m.includes('404') || m.includes('400') || m.includes('429') || m === 'DAILY_QUOTA_EXCEEDED' || m === 'RATE_LIMIT_EXCEEDED';
+      if (!isEndpointError) {
+        throw lastError;
       }
     }
   }
 
-  // All models exhausted
   throw lastError || new Error('Could not reach the tutor right now.');
 }
 
@@ -232,13 +241,13 @@ async function handleGeminiRequest(req, res, systemPrompt, userPrompt) {
 // ── Diagnostic endpoint ──
 app.get('/api/check', async (req, res) => {
   const keyPreview = GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 8) + '...' : 'MISSING';
-  const modelsToTry = GEMINI_MODELS;
   const results = [];
 
-  for (const model of modelsToTry) {
+  for (const baseUrl of GEMINI_ENDPOINTS) {
+    const modelName = baseUrl.match(/models\/([^:]+)/)?.[1] || 'unknown';
     try {
-      const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY || '')}`;
-      const response = await fetch(testUrl, {
+      const url = baseUrl + '?key=' + encodeURIComponent(GEMINI_API_KEY || '');
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -249,10 +258,10 @@ app.get('/api/check', async (req, res) => {
       const body = await response.text();
       let parsed;
       try { parsed = JSON.parse(body); } catch (e) { parsed = body; }
-      results.push({ model, status: response.status, ok: response.ok, body: typeof parsed === 'string' ? parsed.substring(0, 300) : parsed });
-      if (response.ok) break; // First success wins
+      results.push({ model: modelName, url: baseUrl, status: response.status, ok: response.ok, body: typeof parsed === 'string' ? parsed.substring(0, 300) : parsed });
+      if (response.ok) break;
     } catch (err) {
-      results.push({ model, status: 'error', ok: false, body: err.message });
+      results.push({ model: modelName, url: baseUrl, status: 'error', ok: false, body: err.message });
     }
   }
 
@@ -306,5 +315,6 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}  Model: ${GEMINI_MODEL}`);
+  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`[Gemini] Trying ${GEMINI_ENDPOINTS.length} endpoint combinations`);
 });
