@@ -103,12 +103,20 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
         });
 
         if (response.status === 429) {
-          if (attempt === maxRetries) {
-            lastError = new Error('RATE_LIMIT_EXCEEDED');
+          const body = await response.text().catch(() => '(empty)');
+          console.error(`[Gemini] 429 on ${model}, body:`, body.substring(0, 500));
+
+          // Check if it's a daily quota (not retryable) vs per-minute rate limit
+          const isQuota = body.includes('quota') || body.includes('Quota') || body.includes('QUOTA');
+          if (isQuota || attempt === maxRetries) {
+            if (isQuota) {
+              console.error('[Gemini] DAILY QUOTA EXCEEDED — no retry will help');
+            }
+            lastError = new Error(isQuota ? 'DAILY_QUOTA_EXCEEDED' : 'RATE_LIMIT_EXCEEDED');
             break; // Try next model
           }
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-          console.log(`[Gemini] 429 on ${model}, retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms`);
+          console.log(`[Gemini] 429 retry ${attempt + 1}/${maxRetries} on ${model} in ${Math.round(delay)}ms`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
@@ -195,6 +203,13 @@ async function handleGeminiRequest(req, res, systemPrompt, userPrompt) {
   } catch (error) {
     const errMsg = error && error.message ? error.message : '';
     console.error('[Gemini Error]', errMsg || '(no message)');
+
+    if (errMsg === 'DAILY_QUOTA_EXCEEDED') {
+      return res.status(429).json({
+        error: 'quota_exceeded',
+        message: 'Our AI tutor has reached its daily limit. The quota resets at midnight. You can also enable billing at https://console.cloud.google.com to remove this cap.'
+      });
+    }
 
     if (errMsg === 'RATE_LIMIT_EXCEEDED' || errMsg.includes('RATE_LIMIT') || errMsg.includes('429')) {
       return res.status(429).json({
