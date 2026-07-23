@@ -63,75 +63,100 @@ class GeminiQueue {
 
 const geminiQueue = new GeminiQueue();
 
-// ── Gemini API call with retry logic ──
+// ── Gemini API call with retry logic and model fallback ──
+const GEMINI_MODELS = [
+  process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro'
+];
+
 async function callGemini(systemPrompt, userPrompt, options = {}) {
   const apiKey = GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY missing');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const maxRetries = 3;
+  const maxRetries = 2;
+  let lastError = null;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: userPrompt }]
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            },
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: userPrompt }]
+              }
+            ],
+            generationConfig: {
+              maxOutputTokens: options.maxOutputTokens || 800,
+              temperature: options.temperature || 0.7
             }
-          ],
-          generationConfig: {
-            maxOutputTokens: options.maxOutputTokens || 800,
-            temperature: options.temperature || 0.7
+          })
+        });
+
+        if (response.status === 429) {
+          if (attempt === maxRetries) {
+            lastError = new Error('RATE_LIMIT_EXCEEDED');
+            break; // Try next model
           }
-        })
-      });
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          console.log(`[Gemini] 429 on ${model}, retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
 
-      if (response.status === 429) {
-        if (attempt === maxRetries) throw new Error('RATE_LIMIT_EXCEEDED');
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.log(`[Gemini] 429, retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms`);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
+        if (!response.ok) {
+          const errBody = await response.text();
+          console.error(`[Gemini] HTTP ${response.status} on ${model}:`, errBody.substring(0, 500));
+          const err = new Error(`Gemini HTTP ${response.status}: ${errBody}`);
+          if (response.status === 404 || response.status === 400) {
+            // Model not found or bad request — try next model
+            lastError = err;
+            break;
+          }
+          throw err;
+        }
 
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.error(`[Gemini] HTTP ${response.status} body:`, errBody.substring(0, 500));
-        throw new Error(`Gemini HTTP ${response.status}: ${errBody}`);
-      }
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        if (!candidate) {
+          throw new Error('No response was generated (it may have been blocked for safety reasons).');
+        }
+        const text = candidate.content?.parts?.[0]?.text;
+        if (!text) {
+          throw new Error('No readable text returned by the tutor.');
+        }
+        return text;
 
-      const data = await response.json();
-
-      const candidate = data.candidates?.[0];
-      if (!candidate) {
-        throw new Error('No response was generated (it may have been blocked for safety reasons).');
-      }
-
-      const text = candidate.content?.parts?.[0]?.text;
-      if (!text) {
-        throw new Error('No readable text returned by the tutor.');
-      }
-
-      return text;
-
-    } catch (err) {
-      if (attempt === maxRetries) throw err;
-      const msg = err && err.message ? err.message : '';
-      if (msg.startsWith('Gemini HTTP') && !msg.includes('429')) {
-        throw err; // Don't retry on non-429 HTTP errors
+      } catch (err) {
+        if (attempt === maxRetries) {
+          lastError = err;
+          break; // Try next model
+        }
+        const msg = err && err.message ? err.message : '';
+        if (msg.startsWith('Gemini HTTP') && !msg.includes('429')) {
+          lastError = err;
+          break; // Don't retry non-429 HTTP errors, try next model
+        }
       }
     }
+    // If we succeeded, we would have returned. If we get here, this model failed.
+    // If the error isn't model-related (e.g., auth error), stop trying more models.
+    if (lastError && lastError.message && !lastError.message.includes('404') && !lastError.message.includes('400') && !lastError.message.includes('429')) {
+      throw lastError;
+    }
   }
+
+  // All models exhausted
+  throw lastError || new Error('Could not reach the tutor right now.');
 }
 
 // ── Request validation middleware ──
@@ -168,70 +193,51 @@ async function handleGeminiRequest(req, res, systemPrompt, userPrompt) {
     const text = await geminiQueue.enqueue(() => callGemini(systemPrompt, userPrompt));
     res.json({ text });
   } catch (error) {
-    console.error('[Gemini Error]', error.message);
+    const errMsg = error && error.message ? error.message : '';
+    console.error('[Gemini Error]', errMsg || '(no message)');
 
-    if (error.message === 'RATE_LIMIT_EXCEEDED') {
+    if (errMsg === 'RATE_LIMIT_EXCEEDED' || errMsg.includes('RATE_LIMIT') || errMsg.includes('429')) {
       return res.status(429).json({
         error: 'rate_limit',
         message: 'Our AI tutor is busy right now. Please wait 20 seconds and try again.'
       });
     }
 
-    // Check for 429 embedded in the error string
-    if (error.message.includes('429') || error.message.includes('RATE_LIMIT')) {
-      return res.status(429).json({
-        error: 'rate_limit',
-        message: 'Our AI tutor is busy right now. Please wait 20 seconds and try again.'
-      });
-    }
-
-    const friendlyMessage = (error && error.message)
-      ? error.message
-      : 'Could not reach the tutor right now.';
     res.status(500).json({
       error: 'internal_error',
-      message: friendlyMessage
+      message: errMsg || 'Could not reach the tutor right now.'
     });
   }
 }
 
 // ── Diagnostic endpoint ──
 app.get('/api/check', async (req, res) => {
-  const keyPreview = GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 6) + '...' : 'MISSING';
-  const model = GEMINI_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY ? 'HIDDEN' : 'MISSING'}`;
+  const keyPreview = GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 8) + '...' : 'MISSING';
+  const modelsToTry = GEMINI_MODELS;
+  const results = [];
 
-  console.log(`[Check] Model: ${model}, Key prefix: ${keyPreview}`);
-
-  // Test call with a minimal prompt
-  try {
-    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-    const response = await fetch(testUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY || '' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Say OK' }] }],
-        generationConfig: { maxOutputTokens: 10 }
-      })
-    });
-
-    const body = await response.text();
-    let parsed;
-    try { parsed = JSON.parse(body); } catch (e) { parsed = body; }
-
-    console.log(`[Check] Gemini responded with status ${response.status}:`, typeof parsed === 'string' ? parsed.substring(0, 200) : JSON.stringify(parsed).substring(0, 200));
-
-    res.json({
-      status: response.status,
-      ok: response.ok,
-      model,
-      keyPrefix: keyPreview,
-      response: parsed
-    });
-  } catch (err) {
-    console.error('[Check] Error:', err.message);
-    res.status(500).json({ error: err.message, model, keyPrefix: keyPreview });
+  for (const model of modelsToTry) {
+    try {
+      const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY || '')}`;
+      const response = await fetch(testUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Say OK' }] }],
+          generationConfig: { maxOutputTokens: 10 }
+        })
+      });
+      const body = await response.text();
+      let parsed;
+      try { parsed = JSON.parse(body); } catch (e) { parsed = body; }
+      results.push({ model, status: response.status, ok: response.ok, body: typeof parsed === 'string' ? parsed.substring(0, 300) : parsed });
+      if (response.ok) break; // First success wins
+    } catch (err) {
+      results.push({ model, status: 'error', ok: false, body: err.message });
+    }
   }
+
+  res.json({ keyPrefix: keyPreview, results });
 });
 
 // ── Routes ──
