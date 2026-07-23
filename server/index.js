@@ -156,10 +156,14 @@ async function callGemini(systemPrompt, userPrompt, options = {}) {
         }
       }
     }
-    // If we succeeded, we would have returned. If we get here, this model failed.
-    // If the error isn't model-related (e.g., auth error), stop trying more models.
-    if (lastError && lastError.message && !lastError.message.includes('404') && !lastError.message.includes('400') && !lastError.message.includes('429')) {
-      throw lastError;
+    // Model failed. Try next model for quota/rate-limit/model errors.
+    // Throw immediately for auth errors (won't be fixed by a different model).
+    if (lastError && lastError.message) {
+      const m = lastError.message;
+      const isModelOrQuotaError = m.includes('404') || m.includes('400') || m.includes('429') || m === 'DAILY_QUOTA_EXCEEDED' || m === 'RATE_LIMIT_EXCEEDED';
+      if (!isModelOrQuotaError) {
+        throw lastError; // Auth or unknown error — stop here
+      }
     }
   }
 
