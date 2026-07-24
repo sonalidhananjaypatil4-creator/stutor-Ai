@@ -18,7 +18,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash';
 
 if (!OPENROUTER_API_KEY) {
   console.warn('WARNING: OPENROUTER_API_KEY is not defined in the environment.');
