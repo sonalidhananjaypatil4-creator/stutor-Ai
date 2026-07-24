@@ -1242,11 +1242,54 @@ body.voice-supported .voice-start-row {
   align-self: stretch;
 }
 
-/* End conversation button */
-.voice-end-row {
+/* Voice controls row — pause/resume, continue, end */
+.voice-controls-row {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 10px;
   padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-pause-voice {
+  background-color: #f59e0b;
+  color: #1e293b;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-family: 'Work Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.btn-pause-voice:hover {
+  background-color: #d97706;
+}
+
+.btn-continue-voice {
+  background-color: #059669;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-family: 'Work Sans', 'Noto Sans Devanagari', sans-serif;
+}
+
+.btn-continue-voice:hover {
+  background-color: #047857;
 }
 
 .btn-end-voice {

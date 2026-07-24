@@ -207,8 +207,16 @@
               </button>
             </div>
 
-            <!-- End Conversation Button -->
-            <div class="voice-end-row">
+            <!-- Voice Control Buttons Row -->
+            <div class="voice-controls-row" id="voice-controls-row">
+              <button id="voice-pause-btn" class="btn btn-pause-voice hidden" tabindex="0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+                <span id="voice-pause-btn-text">Pause</span>
+              </button>
+              <button id="voice-continue-btn" class="btn btn-continue-voice hidden" tabindex="0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg>
+                <span id="voice-continue-btn-text">Continue Voice Conversation</span>
+              </button>
               <button id="voice-end-btn" class="btn btn-end-voice" tabindex="0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
                 <span id="voice-end-btn-text">End Conversation</span>

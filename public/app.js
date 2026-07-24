@@ -1136,7 +1136,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const voiceStatusText = document.getElementById('voice-status-text');
   const voicePrompt = document.getElementById('voice-prompt');
   const voiceTranscript = document.getElementById('voice-transcript');
-  const voiceEndBtn = document.getElementById('voice-end-btn');
+    const voiceEndBtn = document.getElementById('voice-end-btn');
+    const voicePauseBtn = document.getElementById('voice-pause-btn');
+    const voiceContinueBtn = document.getElementById('voice-continue-btn');
 
   // Language code mapping
   function getVoiceLangCode() {
@@ -1230,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ---- CHANGE B: Turn-Based Voice Conversation (Fixed State Machine) ---- */
     // ── State ──
-    const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking' };
+    const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking', PAUSED: 'paused', WAITING: 'waiting' };
     let vState = VSTATE.IDLE;
     let vTurn = 0;
     let vQuestion = '';
@@ -1264,8 +1266,28 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (s === VSTATE.SPEAKING) {
         voiceStatus.classList.add('status-speaking');
         voiceStatusText.textContent = d.voiceSpeaking;
+      } else if (s === VSTATE.PAUSED) {
+        voiceStatusText.textContent = d.voicePaused;
+      } else if (s === VSTATE.WAITING) {
+        voiceStatusText.textContent = d.voiceSpeaking + ' — ' + d.voiceContinueBtn;
       } else {
         voiceStatusText.textContent = 'Ready';
+      }
+      // Update button visibility based on state
+      if (s === VSTATE.IDLE) {
+        voicePauseBtn.classList.add('hidden');
+        voiceContinueBtn.classList.add('hidden');
+      } else if (s === VSTATE.LISTENING || s === VSTATE.SPEAKING || s === VSTATE.PROCESSING) {
+        voicePauseBtn.classList.remove('hidden');
+        voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
+        voiceContinueBtn.classList.add('hidden');
+      } else if (s === VSTATE.PAUSED) {
+        voicePauseBtn.classList.remove('hidden');
+        voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
+        voiceContinueBtn.classList.add('hidden');
+      } else if (s === VSTATE.WAITING) {
+        voicePauseBtn.classList.add('hidden');
+        voiceContinueBtn.classList.remove('hidden');
       }
       console.log(`[Voice] State → ${s}  Turn → ${vTurn}`);
     }
@@ -1333,6 +1355,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
       voiceTranscript.scrollTop = voiceTranscript.scrollHeight;
       vLog.push({ role, text });
+    }
+
+    // ── Pause / Resume / Continue logic ──
+    function vTogglePause() {
+      if (vState === VSTATE.LISTENING) {
+        vStopRec();
+        vSetState(VSTATE.PAUSED);
+      } else if (vState === VSTATE.SPEAKING) {
+        if (speechSynthesisAPI) {
+          speechSynthesisAPI.pause();
+          console.log('[Voice] speechSynthesis.pause() called');
+        }
+        vSetState(VSTATE.PAUSED);
+      } else if (vState === VSTATE.PAUSED) {
+        if (speechSynthesisAPI && speechSynthesisAPI.paused && vUtter) {
+          speechSynthesisAPI.resume();
+          console.log('[Voice] speechSynthesis.resume() called');
+          vSetState(VSTATE.SPEAKING);
+        } else {
+          vStartListening();
+        }
+      }
+    }
+
+    function vContinueConversation() {
+      voiceContinueBtn.classList.add('hidden');
+      vStartListening();
     }
 
     function vClearLive() { if (vLiveEl) vLiveEl.textContent = ''; }
@@ -1526,7 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(err => {
               console.error('[Voice] Deepen API error:', err);
               vAddBubble('tutor', '⚠️ ' + (err.message || 'Could not go deeper'));
-              vStartListening();
+              vSetState(VSTATE.WAITING);
             });
             return;
           }
@@ -1555,15 +1604,15 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(err => {
         console.error('[Voice] API error:', err);
         vAddBubble('tutor', '⚠️ ' + (err.message || 'Something went wrong'));
-        vStartListening();
+        vSetState(VSTATE.WAITING);
       });
     }
 
     // ── Speech synthesis ──
     function vSpeak(text) {
       if (!speechSynthesisAPI) {
-        console.log('[Voice] speechSynthesisAPI not available — skipping speak, resuming listening');
-        vStartListening(); return;
+        console.log('[Voice] speechSynthesisAPI not available — skipping speak, showing continue');
+        vSetState(VSTATE.WAITING); return;
       }
 
       vStopRec();
@@ -1591,12 +1640,12 @@ document.addEventListener('DOMContentLoaded', () => {
         u.onend = () => {
           console.log('[Voice] utterance.onend');
           vUtter = null;
-          if (vState === VSTATE.SPEAKING) vStartListening();
+          if (vState === VSTATE.SPEAKING) vSetState(VSTATE.WAITING);
         };
         u.onerror = (ev) => {
           console.warn('[Voice] utterance.onerror:', ev.error);
           vUtter = null;
-          if (vState === VSTATE.SPEAKING) vStartListening();
+          if (vState === VSTATE.SPEAKING) vSetState(VSTATE.WAITING);
         };
         u.onpause = () => console.log('[Voice] utterance.onpause');
         u.onresume = () => console.log('[Voice] utterance.onresume');
@@ -1616,7 +1665,7 @@ document.addEventListener('DOMContentLoaded', () => {
           } catch (e) {
             console.error(`[Voice] speechSynthesis.speak() threw: ${e.name} ${e.message}`);
             vUtter = null;
-            if (vState === VSTATE.SPEAKING) vStartListening();
+            if (vState === VSTATE.SPEAKING) vSetState(VSTATE.WAITING);
           }
         }, 0);
       };
@@ -1677,6 +1726,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (speechSynthesisAPI) speechSynthesisAPI.cancel();
       vUtter = null;
       vClearTimeout();
+      voicePauseBtn.classList.add('hidden');
+      voiceContinueBtn.classList.add('hidden');
       vSetState(VSTATE.IDLE);
       vHidePermWarn();
       voiceGoDeeperRow.classList.add('hidden');
@@ -1754,6 +1805,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Event listeners ──
     voiceConversationBtn.addEventListener('click', vStartConversation);
     voiceEndBtn.addEventListener('click', vEndConversation);
+    voicePauseBtn.addEventListener('click', vTogglePause);
+    voiceContinueBtn.addEventListener('click', vContinueConversation);
     voiceInfoDismiss.addEventListener('click', () => {
       voiceInfoNote.classList.add('hidden');
       localStorage.setItem('voice-mode-intro-seen', 'true');
@@ -1782,6 +1835,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const voiceEndBtnText = document.getElementById('voice-end-btn-text');
     if (voiceEndBtnText) voiceEndBtnText.textContent = dict.voiceEndBtn;
+
+    const voicePauseBtnText = document.getElementById('voice-pause-btn-text');
+    if (voicePauseBtnText) {
+      if (vState === VSTATE.PAUSED) {
+        voicePauseBtnText.textContent = dict.voiceResumeBtn;
+      } else {
+        voicePauseBtnText.textContent = dict.voicePauseBtn;
+      }
+    }
+
+    const voiceContinueBtnText = document.getElementById('voice-continue-btn-text');
+    if (voiceContinueBtnText) voiceContinueBtnText.textContent = dict.voiceContinueBtn;
 
     const voiceGoDeeperBtnText = document.getElementById('voice-go-deeper-btn-text');
     if (voiceGoDeeperBtnText) voiceGoDeeperBtnText.textContent = dict.goDeeperBtn;
