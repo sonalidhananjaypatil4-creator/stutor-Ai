@@ -162,7 +162,6 @@ document.addEventListener('DOMContentLoaded', () => {
     targetEl.innerHTML = '';
 
     const isDark = htmlElement.getAttribute('data-theme') === 'dark';
-    const cs = getComputedStyle(document.documentElement);
 
     if (typeof mermaid !== 'undefined') {
       console.log('[STEP 3] Calling mermaid.render(). elementId:', elementId, 'code length:', code.length, 'code preview:', code.substring(0, 100));
@@ -170,19 +169,34 @@ document.addEventListener('DOMContentLoaded', () => {
         mermaid.initialize({
           startOnLoad: false,
           theme: 'base',
-          themeVariables: {
-            primaryColor: cs.getPropertyValue('--bg-card').trim() || (isDark ? '#1e293b' : '#ffffff'),
-            primaryTextColor: cs.getPropertyValue('--text-primary').trim() || (isDark ? '#f8fafc' : '#0f172a'),
-            primaryBorderColor: isDark ? '#4B5563' : '#cbd5e1',
-            lineColor: isDark ? '#6B7280' : '#94a3b8',
-            secondaryColor: cs.getPropertyValue('--bg-primary').trim() || (isDark ? '#0f172a' : '#f8fafc'),
-            secondaryTextColor: cs.getPropertyValue('--text-secondary').trim() || (isDark ? '#94a3b8' : '#475569'),
-            tertiaryColor: isDark ? '#151c2c' : '#f1f5f9',
-            clusterBkg: cs.getPropertyValue('--bg-primary').trim() || (isDark ? '#0f172a' : '#f8fafc'),
-            clusterBorder: cs.getPropertyValue('--border-color').trim() || (isDark ? '#334155' : '#e2e8f0'),
-            titleColor: cs.getPropertyValue('--text-primary').trim() || (isDark ? '#f8fafc' : '#0f172a'),
-            edgeLabelBackground: cs.getPropertyValue('--bg-card').trim() || (isDark ? '#1e293b' : '#ffffff'),
-            nodeBorder: cs.getPropertyValue('--border-color').trim() || (isDark ? '#475569' : '#cbd5e1'),
+          themeVariables: isDark ? {
+            primaryColor: '#8894A8',
+            primaryTextColor: '#0F172A',
+            primaryBorderColor: '#0F172A',
+            lineColor: '#1E293B',
+            secondaryColor: '#A0AEC0',
+            secondaryTextColor: '#0F172A',
+            tertiaryColor: '#CBD5E1',
+            titleColor: '#F1F5F9',
+            nodeBorder: '#0F172A',
+            clusterBkg: '#718096',
+            clusterBorder: '#1E293B',
+            edgeLabelBackground: '#8894A8',
+            fontSize: '14px',
+          } : {
+            primaryColor: '#C7D2E8',
+            primaryTextColor: '#111827',
+            primaryBorderColor: '#1F2937',
+            lineColor: '#374151',
+            secondaryColor: '#E5E9F2',
+            secondaryTextColor: '#111827',
+            tertiaryColor: '#F3F4F6',
+            titleColor: '#111827',
+            nodeBorder: '#1F2937',
+            clusterBkg: '#E5E9F2',
+            clusterBorder: '#374151',
+            edgeLabelBackground: '#FFFFFF',
+            fontSize: '14px',
           },
           securityLevel: 'loose'
         });
