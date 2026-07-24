@@ -1247,11 +1247,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let vPermWarn = document.getElementById('voice-permission-warning');
     let vPermText = document.getElementById('voice-permission-text');
     let vTimeoutId = null;
-    // Pause/resume tracking (cancel/respeak workaround for Chrome bug)
+    // Pause/resume tracking — sentence-level (cancel/respeak workaround for Chrome bug)
     let vSpeakFullText = '';
     let vSpeakPausedAt = 0;
     let vSpeakCharIndex = 0;
     let vIsPaused = false;
+    let vSentenceArray = [];
+    let vSentenceCumLengths = [];
+    let vCurrentSentenceIndex = 0;
+    let vCurrentUtteranceBaseOffset = 0;
 
     // ── UI helpers ──
     function vShowPermWarn(msg) {
@@ -1317,6 +1321,27 @@ document.addEventListener('DOMContentLoaded', () => {
         .trim();
     }
 
+    // ── Sentence helpers for resume position tracking ──
+    function splitSentences(text) {
+      return text.split(/(?<=[.!?])(?:\s+|$)/).filter(s => s.length > 0);
+    }
+    function buildCumLengths(sentences) {
+      const cum = [];
+      let total = 0;
+      for (let i = 0; i < sentences.length; i++) {
+        cum.push(total);
+        total += sentences[i].length;
+        if (i < sentences.length - 1) total += 1;
+      }
+      return cum;
+    }
+    function findSentenceIndex(charIndex, cumLengths) {
+      for (let i = cumLengths.length - 1; i >= 0; i--) {
+        if (charIndex >= cumLengths[i]) return i;
+      }
+      return 0;
+    }
+
     function vAddBubble(role, text) {
       const d = window.APP_TRANSLATIONS[languageSelect.value];
       const b = document.createElement('div');
@@ -1369,18 +1394,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
       if (mv) u.voice = mv;
       u.onstart = () => {
-        console.log('[Voice] UTTER.onstart vUtter=' + (vUtter === u) + ' text.length=' + text.length);
+        console.log('[Voice] UTTER.onstart vUtter=' + (vUtter === u) + ' text.length=' + text.length + ' baseOffset=' + vCurrentUtteranceBaseOffset + ' sentenceArray.len=' + vSentenceArray.length);
         const dd = window.APP_TRANSLATIONS[languageSelect.value];
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + dd.voicePauseBtn + '</span>';
       };
       u.onboundary = (ev) => {
-        vSpeakCharIndex = (vSpeakPausedAt || 0) + ev.charIndex;
-        console.log('[Voice] UTTER.boundary name=' + ev.name + ' relIdx=' + ev.charIndex + ' absIdx=' + vSpeakCharIndex);
+        const absCharIndex = vCurrentUtteranceBaseOffset + ev.charIndex;
+        vSpeakCharIndex = absCharIndex;
+        const newIdx = findSentenceIndex(absCharIndex, vSentenceCumLengths);
+        if (newIdx !== vCurrentSentenceIndex || ev.name === 'sentence') {
+          vCurrentSentenceIndex = newIdx;
+        }
+        console.log('[Voice] UTTER.boundary name=' + ev.name + ' relIdx=' + ev.charIndex + ' absIdx=' + absCharIndex + ' sentenceIdx=' + vCurrentSentenceIndex + '/' + vSentenceArray.length);
       };
       u.onend = () => {
         console.log('[Voice] UTTER.onend vIsPaused=' + vIsPaused + ' vState=' + vState);
         vUtter = null;
         vIsPaused = false;
+        vSentenceArray = [];
+        vSentenceCumLengths = [];
+        vCurrentSentenceIndex = 0;
+        vCurrentUtteranceBaseOffset = 0;
         vSpeakFullText = '';
         vSpeakPausedAt = 0;
         vSpeakCharIndex = 0;
@@ -1392,6 +1426,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('[Voice] utterance.onerror (non-cancel):', ev.error);
         vUtter = null;
         vIsPaused = false;
+        vSentenceArray = [];
+        vSentenceCumLengths = [];
+        vCurrentSentenceIndex = 0;
+        vCurrentUtteranceBaseOffset = 0;
         vSpeakFullText = '';
         vSpeakPausedAt = 0;
         vSpeakCharIndex = 0;
@@ -1431,26 +1469,23 @@ document.addEventListener('DOMContentLoaded', () => {
         vUtter = null;
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
         console.log('[Voice] PAUSE: done. sapi.speaking=' + speechSynthesisAPI.speaking + ' vIsPaused=' + vIsPaused);
-      } else if (vIsPaused && vSpeakFullText) {
-        // Paused → resume: create new utterance from saved position
-        console.log('[Voice] RESUME: vIsPaused=' + vIsPaused + ' vSpeakPausedAt=' + vSpeakPausedAt + ' vSpeakFullText.length=' + vSpeakFullText.length);
-        let remaining;
-        if (vSpeakPausedAt > 0 && vSpeakPausedAt < vSpeakFullText.length) {
-          remaining = vSpeakFullText.substring(vSpeakPausedAt);
-          console.log('[Voice] RESUME: partial resume from charIndex=' + vSpeakPausedAt + ' remaining=' + remaining.length + ' chars preview="' + remaining.substring(0, 80) + '..."');
-        } else if (vSpeakPausedAt >= vSpeakFullText.length) {
-          console.log('[Voice] RESUME: vSpeakPausedAt >= fullText length, restarting from beginning');
-          remaining = vSpeakFullText;
-        } else {
-          // vSpeakPausedAt is 0 (no onboundary fired before pause)
-          console.log('[Voice] RESUME: vSpeakPausedAt is 0 (no boundary tracked), restarting from beginning');
-          remaining = vSpeakFullText;
-        }
+      } else if (vIsPaused && vSentenceArray.length > 0) {
+        console.log('[Voice] RESUME: vIsPaused=' + vIsPaused + ' vCurrentSentenceIndex=' + vCurrentSentenceIndex + ' of ' + vSentenceArray.length + ' sentences');
+        console.log('[Voice] RESUME: sentence[' + vCurrentSentenceIndex + ']="' + (vSentenceArray[vCurrentSentenceIndex] || '').substring(0, 60) + '"');
+        const remainingSentences = vSentenceArray.slice(vCurrentSentenceIndex);
+        const remaining = remainingSentences.join(' ');
+        console.log('[Voice] RESUME: remainingSentences=' + remainingSentences.length + ' of ' + vSentenceArray.length + ' text="' + remaining.substring(0, 120) + '..."');
+        vCurrentUtteranceBaseOffset = vSentenceCumLengths[vCurrentSentenceIndex] || 0;
+        console.log('[Voice] RESUME: setting baseOffset=' + vCurrentUtteranceBaseOffset);
         vIsPaused = false;
         vSpeakPausedAt = 0;
         vSpeakCharIndex = 0;
         vSpeakUtterance(remaining, () => {
           console.log('[Voice] RESUME utterance onDone fired');
+          vSentenceArray = [];
+          vSentenceCumLengths = [];
+          vCurrentSentenceIndex = 0;
+          vCurrentUtteranceBaseOffset = 0;
           vSpeakFullText = '';
           vSpeakPausedAt = 0;
           vSpeakCharIndex = 0;
@@ -1460,7 +1495,7 @@ document.addEventListener('DOMContentLoaded', () => {
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
         console.log('[Voice] RESUME: new utterance passed to vSpeakUtterance, button set to Pause');
       } else {
-        console.log('[Voice] TOGGLE_PAUSE fallthrough: vIsPaused=' + vIsPaused + ' vSpeakFullText=' + (vSpeakFullText ? 'exists' : 'empty') + ' vUtter=' + (vUtter ? 'set' : 'null') + ' speaking=' + speechSynthesisAPI.speaking);
+        console.log('[Voice] TOGGLE_PAUSE fallthrough: vIsPaused=' + vIsPaused + ' vSpeakFullText=' + (vSpeakFullText ? 'exists' : 'empty') + ' vSentenceArray.len=' + vSentenceArray.length + ' vCurrentSentenceIndex=' + vCurrentSentenceIndex + ' vUtter=' + (vUtter ? 'set' : 'null') + ' speaking=' + speechSynthesisAPI.speaking);
       }
     }
 
@@ -1705,14 +1740,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Strip mermaid code blocks and LaTeX syntax before speaking
       const speakText = vStripMarkup(text);
-      vSpeakFullText = speakText;
+      vSentenceArray = splitSentences(speakText);
+      vSentenceCumLengths = buildCumLengths(vSentenceArray);
+      vCurrentSentenceIndex = 0;
+      vCurrentUtteranceBaseOffset = 0;
+      const joined = vSentenceArray.join(' ');
+      vSpeakFullText = joined;
       vSpeakPausedAt = 0;
       vSpeakCharIndex = 0;
       vIsPaused = false;
 
-      console.log('[Voice] vSpeak full length=' + speakText.length + ' preview="' + speakText.substring(0, 80) + '..."');
+      console.log('[Voice] vSpeak sentences=' + vSentenceArray.length + ' cumLengths=' + JSON.stringify(vSentenceCumLengths) + ' joined.length=' + joined.length);
+      console.log('[Voice] vSpeak sentence[0]="' + (vSentenceArray[0] || '').substring(0, 60) + '"');
+      if (vSentenceArray.length > 1) console.log('[Voice] vSpeak sentence[1]="' + (vSentenceArray[1] || '').substring(0, 60) + '"');
 
-      vSpeakUtterance(speakText, () => {
+      vSpeakUtterance(joined, () => {
         if (vState === VSTATE.SPEAKING) vSetState(VSTATE.WAITING);
       });
     }
