@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const attemptCharCount = document.getElementById('attempt-char-count');
   const attemptValidationMsg = document.getElementById('attempt-validation-msg');
   const attemptStamp = document.getElementById('attempt-stamp');
+  const focusRing = document.getElementById('focus-ring');
+  const focusRingProgress = document.getElementById('focus-ring-progress');
+  const focusRingText = document.getElementById('focus-ring-text');
 
   const actionRow = document.getElementById('action-row');
   const getHintBtn = document.getElementById('get-hint-btn');
@@ -472,6 +475,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Attempt validation/chars
     const attemptValidation = validateAttempt(attemptText);
     attemptCharCount.textContent = `${cleanAttempt.length} / ${MIN_ATTEMPT_CHARACTERS}`;
+
+    // Update focus ring
+    const FOCUS_RING_CIRCUMFERENCE = 2 * Math.PI * 16; // r=16 → ~100.531
+    const progress = Math.min(cleanAttempt.length / MIN_ATTEMPT_CHARACTERS, 1);
+    const dashOffset = FOCUS_RING_CIRCUMFERENCE * (1 - progress);
+    focusRingProgress.setAttribute('stroke-dashoffset', dashOffset);
+    focusRingText.textContent = cleanAttempt.length;
+
+    const isUnlocked = cleanAttempt.length >= MIN_ATTEMPT_CHARACTERS;
+    focusRing.classList.toggle('unlocked', isUnlocked);
 
     // Show messages
     if (cleanAttempt.length === 0) {

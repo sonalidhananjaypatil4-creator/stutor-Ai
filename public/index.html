@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stutor-Ai — AI Tutor</title>
   
-  <!-- Font imports (includes Noto Sans Devanagari fallback) -->
+  <!-- Font imports -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Kalam:wght@400;700&family=Work+Sans:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="styles.css?v=3">
   
@@ -81,7 +81,8 @@
           </div>
 
             <header class="app-header">
-              <p class="subtitle" id="app-subtitle">A patient tutor who helps you *after* you try.</p>
+              <h1 class="app-heading" id="app-heading">Stutor-Ai</h1>
+              <p class="app-subtitle" id="app-subtitle">A patient tutor who helps you <em>after</em> you try.</p>
             </header>
 
           <!-- Input Form Section -->
@@ -144,14 +145,22 @@
               
               <div class="meta-row">
                 <span class="validation-feedback" id="attempt-validation-msg">Write at least 25 characters to unlock help</span>
-                <span class="char-count" id="attempt-char-count">0 / 25</span>
+                <div class="focus-ring-wrapper">
+                  <svg class="focus-ring" id="focus-ring" width="40" height="40" viewBox="0 0 40 40" aria-label="Character count progress">
+                    <circle class="focus-ring-bg" cx="20" cy="20" r="16" fill="none" stroke-width="3" />
+                    <circle class="focus-ring-progress" id="focus-ring-progress" cx="20" cy="20" r="16" fill="none" stroke-width="3"
+                      stroke-dasharray="100.531" stroke-dashoffset="100.531"
+                      transform="rotate(-90 20 20)" stroke-linecap="round" />
+                    <text class="focus-ring-text" id="focus-ring-text" x="20" y="24" text-anchor="middle" font-size="11" font-weight="600">0</text>
+                  </svg>
+                </div>
               </div>
             </div>
 
             <!-- Lock and Action row -->
             <div class="action-row" id="action-row">
               <button id="get-hint-btn" class="btn btn-primary disabled" disabled tabindex="0">
-                <span class="btn-lock-icon">🔒</span> <span id="get-hint-btn-text">Get a Hint</span>
+                <span class="btn-lock-icon" id="btn-lock-icon">🔒</span> <span id="get-hint-btn-text">Get Answer</span>
               </button>
             </div>
 
