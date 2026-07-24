@@ -122,18 +122,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function extractMermaidCode(text) {
-    if (!text) return { cleanText: '', mermaidCode: null };
+    if (!text) {
+      console.log('[STEP 2] extractMermaidCode: input was falsy', text);
+      return { cleanText: '', mermaidCode: null };
+    }
     const match = text.match(/```mermaid([\s\S]*?)```/i);
     if (match) {
       const code = match[1].trim();
       const cleanText = text.replace(/```mermaid[\s\S]*?```/gi, '').trim();
+      console.log('[STEP 2] extractMermaidCode: FOUND mermaid block. Code length:', code.length, 'Preview:', code.substring(0, 120));
       return { cleanText, mermaidCode: code };
     }
+    // Log a snippet of what the AI actually returned when no mermaid found
+    const snippet = text.substring(0, 500);
+    console.log('[STEP 2] extractMermaidCode: NO mermaid block found. Raw text preview:', snippet);
     return { cleanText: text, mermaidCode: null };
   }
 
   async function renderDiagram(containerEl, targetEl, code, elementId) {
+    // STEP 4: Check container element exists
+    console.log('[STEP 4] renderDiagram called. containerEl:', containerEl ? containerEl.id || containerEl.className : 'null', 'targetEl:', targetEl ? targetEl.id || targetEl.className : 'null', 'elementId:', elementId);
+    if (!containerEl) {
+      console.error('[STEP 4] containerEl is null/undefined for elementId:', elementId);
+      return;
+    }
+    if (!targetEl) {
+      console.error('[STEP 4] targetEl is null/undefined for elementId:', elementId);
+      return;
+    }
+
     if (!code) {
+      console.log('[STEP 3] renderDiagram: no code provided, hiding container');
       containerEl.classList.add('hidden');
       targetEl.innerHTML = '';
       return;
@@ -145,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
 
     if (typeof mermaid !== 'undefined') {
+      console.log('[STEP 3] Calling mermaid.render(). elementId:', elementId, 'code length:', code.length, 'code preview:', code.substring(0, 100));
       try {
         mermaid.initialize({
           startOnLoad: false,
@@ -160,9 +180,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oldErr) oldErr.remove();
 
         const { svg } = await mermaid.render(id, code);
+        console.log('[STEP 3] mermaid.render SUCCEEDED. SVG length:', svg.length, 'SVG preview:', svg.substring(0, 100));
         targetEl.innerHTML = svg;
+
+        // STEP 5: Verify the container actually has visible content now
+        const hasContent = targetEl.querySelector('svg') !== null;
+        console.log('[STEP 5] After render: targetEl has svg child?', hasContent, 'container classes:', containerEl.className);
       } catch (err) {
-        console.warn('Failed to render Mermaid diagram:', err);
+        console.warn('[STEP 3] mermaid.render FAILED. Full error:', err);
+        console.warn('[STEP 3] Error keys:', Object.keys(err));
+        console.warn('[STEP 3] Error stringified:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+        console.warn('[STEP 3] The code that failed was:', code);
         containerEl.classList.add('hidden');
         targetEl.innerHTML = '';
         
@@ -172,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oldErr) oldErr.remove();
       }
     } else {
-      console.error('Mermaid.js library is not loaded');
+      console.error('[STEP 3] Mermaid.js library is not loaded');
       containerEl.classList.add('hidden');
     }
   }
@@ -579,6 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
     actionRow.classList.add('hidden');
 
     // Load responses
+    console.log('[STEP 1] Session load: raw hint text:', session.hint);
     const hintParsed = extractMermaidCode(session.hint);
     hintContent.textContent = hintParsed.cleanText;
     renderMath(hintContent);
@@ -592,6 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
     highlightFeedbackButtons('hint', session.hintFeedback);
 
     if (session.fullExplanation) {
+      console.log('[STEP 1] Session load: raw explanation text:', session.fullExplanation);
       const explainParsed = extractMermaidCode(session.fullExplanation);
       explainContent.textContent = explainParsed.cleanText;
       renderMath(explainContent);
@@ -615,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Restore deepen explanation
     if (session.deepenExplanation) {
+      console.log('[STEP 1] Session load: raw deepen text:', session.deepenExplanation);
       const deepenParsed = extractMermaidCode(session.deepenExplanation);
       deepenContent.textContent = deepenParsed.cleanText;
       renderMath(deepenContent);
@@ -852,7 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Display response — extract Mermaid diagram if present
-      console.log('[Diagram Pipeline] Raw hint response received:', data.text.substring(0, 200) + '...');
+      console.log('[STEP 1] Raw hint response received (FULL):', data.text);
       const hintParsed = extractMermaidCode(data.text);
       console.log('[Diagram Pipeline] Mermaid code extracted from hint:', hintParsed.mermaidCode ? 'YES (' + hintParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
       
@@ -945,7 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Display Explanation — extract Mermaid diagram if present
-      console.log('[Diagram Pipeline] Raw explanation response received:', data.text.substring(0, 200) + '...');
+      console.log('[STEP 1] Raw explanation response received (FULL):', data.text);
       const explainParsed = extractMermaidCode(data.text);
       console.log('[Diagram Pipeline] Mermaid code extracted from explanation:', explainParsed.mermaidCode ? 'YES (' + explainParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
 
@@ -1014,6 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error || dict.errorTitle);
+      console.log('[STEP 1] Raw deepen response received (FULL):', data.text);
       const deepenParsed = extractMermaidCode(data.text);
 
       deepenContent.textContent = deepenParsed.cleanText;
@@ -1242,6 +1274,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (role === 'tutor') {
         // Parse mermaid code blocks and render math (same as typed flow)
+        console.log('[STEP 1] vAddBubble: raw tutor text:', text);
         const parsed = extractMermaidCode(text);
         c.textContent = parsed.cleanText;
         b.appendChild(l); b.appendChild(c);
