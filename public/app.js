@@ -234,6 +234,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function renderMarkdown(container, text) {
+    if (!container) return;
+    if (!text) { container.innerHTML = ''; return; }
+    const html = typeof marked !== 'undefined' ? marked.parse(text) : text;
+    container.innerHTML = html;
+    if (typeof renderMath === 'function') renderMath(container);
+  }
+
   function reRenderVisibleDiagrams() {
     if (currentHintMermaidCode) {
       renderDiagram(hintDiagramContainer, hintDiagram, currentHintMermaidCode, 'hint-diagram');
@@ -638,8 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load responses
     console.log('[STEP 1] Session load: raw hint text:', session.hint);
     const hintParsed = extractMermaidCode(session.hint);
-    hintContent.textContent = hintParsed.cleanText;
-    renderMath(hintContent);
+    renderMarkdown(hintContent, hintParsed.cleanText);
     responseSection.classList.remove('hidden');
     
     currentHintMermaidCode = hintParsed.mermaidCode;
@@ -652,8 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session.fullExplanation) {
       console.log('[STEP 1] Session load: raw explanation text:', session.fullExplanation);
       const explainParsed = extractMermaidCode(session.fullExplanation);
-      explainContent.textContent = explainParsed.cleanText;
-      renderMath(explainContent);
+      renderMarkdown(explainContent, explainParsed.cleanText);
       explanationCard.classList.remove('hidden');
       stuckRow.classList.add('hidden');
 
@@ -676,8 +682,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session.deepenExplanation) {
       console.log('[STEP 1] Session load: raw deepen text:', session.deepenExplanation);
       const deepenParsed = extractMermaidCode(session.deepenExplanation);
-      deepenContent.textContent = deepenParsed.cleanText;
-      renderMath(deepenContent);
+      renderMarkdown(deepenContent, deepenParsed.cleanText);
       deeperCard.classList.remove('hidden');
       goDeeperRow.classList.add('hidden');
 
@@ -916,8 +921,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const hintParsed = extractMermaidCode(data.text);
       console.log('[Diagram Pipeline] Mermaid code extracted from hint:', hintParsed.mermaidCode ? 'YES (' + hintParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
       
-      hintContent.textContent = hintParsed.cleanText;
-      renderMath(hintContent);
+      renderMarkdown(hintContent, hintParsed.cleanText);
       tutorLoader.classList.add('hidden');
       responseSection.classList.remove('hidden');
       stuckRow.classList.remove('hidden');
@@ -1009,8 +1013,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const explainParsed = extractMermaidCode(data.text);
       console.log('[Diagram Pipeline] Mermaid code extracted from explanation:', explainParsed.mermaidCode ? 'YES (' + explainParsed.mermaidCode.substring(0, 80) + '...)' : 'NONE');
 
-      explainContent.textContent = explainParsed.cleanText;
-      renderMath(explainContent);
+      renderMarkdown(explainContent, explainParsed.cleanText);
       explainLoader.classList.add('hidden');
       explanationCard.classList.remove('hidden');
 
@@ -1077,8 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('[STEP 1] Raw deepen response received (FULL):', data.text);
       const deepenParsed = extractMermaidCode(data.text);
 
-      deepenContent.textContent = deepenParsed.cleanText;
-      renderMath(deepenContent);
+      renderMarkdown(deepenContent, deepenParsed.cleanText);
       deepenLoader.classList.add('hidden');
       deeperCard.classList.remove('hidden');
 
@@ -1324,12 +1326,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Parse mermaid code blocks and render math (same as typed flow)
         console.log('[STEP 1] vAddBubble: raw tutor text:', text);
         const parsed = extractMermaidCode(text);
-        c.textContent = parsed.cleanText;
         b.appendChild(l); b.appendChild(c);
         voiceTranscript.appendChild(b);
-
-        // Render KaTeX math in the clean text
-        renderMath(c);
+        renderMarkdown(c, parsed.cleanText);
 
         // Render diagram if mermaid code was found
         if (parsed.mermaidCode) {
