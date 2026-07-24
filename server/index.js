@@ -17,11 +17,11 @@ app.use(express.json());
 
 app.use(express.static(path.join(__dirname, '../public')));
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash';
 
-if (!DEEPSEEK_API_KEY) {
-  console.warn('WARNING: DEEPSEEK_API_KEY is not defined in the environment.');
+if (!OPENROUTER_API_KEY) {
+  console.warn('WARNING: OPENROUTER_API_KEY is not defined in the environment.');
 }
 
 // ── Request queue ──
@@ -30,7 +30,7 @@ class AIQueue {
     this.queue = [];
     this.processing = false;
     this.lastRequestTime = 0;
-    this.minGapMs = 1000;
+    this.minGapMs = 500;
   }
 
   enqueue(taskFn) {
@@ -63,12 +63,12 @@ class AIQueue {
 
 const aiQueue = new AIQueue();
 
-// ── DeepSeek API call ──
+// ── OpenRouter API call ──
 async function callAI(systemPrompt, userPrompt) {
-  const apiKey = DEEPSEEK_API_KEY;
-  if (!apiKey) throw new Error('DEEPSEEK_API_KEY missing');
+  const apiKey = OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY missing');
 
-  const url = 'https://api.deepseek.com/v1/chat/completions';
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
   const maxRetries = 2;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -77,10 +77,12 @@ async function callAI(systemPrompt, userPrompt) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
+          'Authorization': 'Bearer ' + apiKey,
+          'HTTP-Referer': 'https://stutor-ai.onrender.com',
+          'X-Title': 'Show Your Work First'
         },
         body: JSON.stringify({
-          model: DEEPSEEK_MODEL,
+          model: OPENROUTER_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -94,15 +96,15 @@ async function callAI(systemPrompt, userPrompt) {
       if (response.status === 429) {
         if (attempt === maxRetries) throw new Error('RATE_LIMIT_EXCEEDED');
         const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.log(`[DeepSeek] 429, retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms`);
+        console.log(`[OpenRouter] 429, retry ${attempt + 1}/${maxRetries} in ${Math.round(delay)}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
 
       if (!response.ok) {
         const errBody = await response.text();
-        console.error(`[DeepSeek] HTTP ${response.status}:`, errBody.substring(0, 500));
-        throw new Error(`DeepSeek API error (${response.status})`);
+        console.error(`[OpenRouter] HTTP ${response.status}:`, errBody.substring(0, 500));
+        throw new Error(`OpenRouter API error (${response.status})`);
       }
 
       const data = await response.json();
@@ -177,32 +179,36 @@ async function handleAIRequest(req, res, systemPrompt, userPrompt) {
 
 // ── Diagnostic endpoint ──
 app.get('/api/check', async (req, res) => {
-  const keyPreview = DEEPSEEK_API_KEY ? DEEPSEEK_API_KEY.substring(0, 8) + '...' : 'MISSING';
-  const result = {};
+  const keyPreview = OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0, 12) + '...' : 'MISSING';
 
   try {
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + DEEPSEEK_API_KEY
+        'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
+        'HTTP-Referer': 'https://stutor-ai.onrender.com',
+        'X-Title': 'Show Your Work First'
       },
       body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
+        model: OPENROUTER_MODEL,
         messages: [{ role: 'user', content: 'Say OK' }],
         max_tokens: 10,
         stream: false
       })
     });
     const body = await response.text();
-    result.status = response.status;
-    result.ok = response.ok;
-    result.body = body.substring(0, 500);
+    res.json({
+      provider: 'openrouter',
+      model: OPENROUTER_MODEL,
+      keyPrefix: keyPreview,
+      status: response.status,
+      ok: response.ok,
+      body: body.substring(0, 500)
+    });
   } catch (err) {
-    result.error = err.message;
+    res.json({ provider: 'openrouter', model: OPENROUTER_MODEL, keyPrefix: keyPreview, error: err.message });
   }
-
-  res.json({ provider: 'deepseek', model: DEEPSEEK_MODEL, keyPrefix: keyPreview, ...result });
 });
 
 // ── Routes ──
@@ -249,5 +255,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}  AI: DeepSeek (${DEEPSEEK_MODEL})`);
+  console.log(`Server running at http://localhost:${PORT}  AI: OpenRouter (${OPENROUTER_MODEL})`);
 });

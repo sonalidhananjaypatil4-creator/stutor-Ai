@@ -5,9 +5,9 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: DEEPSEEK_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false   # Set this manually in the Render dashboard
-      - key: DEEPSEEK_MODEL
-        value: deepseek-chat
+      - key: OPENROUTER_MODEL
+        value: google/gemini-2.0-flash
       - key: NODE_ENV
         value: production
