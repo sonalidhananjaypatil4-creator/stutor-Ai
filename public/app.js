@@ -161,14 +161,29 @@ document.addEventListener('DOMContentLoaded', () => {
     containerEl.classList.remove('hidden');
     targetEl.innerHTML = '';
 
-    const currentTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
+    const isDark = htmlElement.getAttribute('data-theme') === 'dark';
+    const cs = getComputedStyle(document.documentElement);
 
     if (typeof mermaid !== 'undefined') {
       console.log('[STEP 3] Calling mermaid.render(). elementId:', elementId, 'code length:', code.length, 'code preview:', code.substring(0, 100));
       try {
         mermaid.initialize({
           startOnLoad: false,
-          theme: currentTheme,
+          theme: 'base',
+          themeVariables: {
+            primaryColor: cs.getPropertyValue('--bg-card').trim() || (isDark ? '#1e293b' : '#ffffff'),
+            primaryTextColor: cs.getPropertyValue('--text-primary').trim() || (isDark ? '#f8fafc' : '#0f172a'),
+            primaryBorderColor: isDark ? '#4B5563' : '#cbd5e1',
+            lineColor: isDark ? '#6B7280' : '#94a3b8',
+            secondaryColor: cs.getPropertyValue('--bg-primary').trim() || (isDark ? '#0f172a' : '#f8fafc'),
+            secondaryTextColor: cs.getPropertyValue('--text-secondary').trim() || (isDark ? '#94a3b8' : '#475569'),
+            tertiaryColor: isDark ? '#151c2c' : '#f1f5f9',
+            clusterBkg: cs.getPropertyValue('--bg-primary').trim() || (isDark ? '#0f172a' : '#f8fafc'),
+            clusterBorder: cs.getPropertyValue('--border-color').trim() || (isDark ? '#334155' : '#e2e8f0'),
+            titleColor: cs.getPropertyValue('--text-primary').trim() || (isDark ? '#f8fafc' : '#0f172a'),
+            edgeLabelBackground: cs.getPropertyValue('--bg-card').trim() || (isDark ? '#1e293b' : '#ffffff'),
+            nodeBorder: cs.getPropertyValue('--border-color').trim() || (isDark ? '#475569' : '#cbd5e1'),
+          },
           securityLevel: 'loose'
         });
 
