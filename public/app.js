@@ -1251,6 +1251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let vSpeakFullText = '';
     let vSpeakPausedAt = 0;
     let vSpeakCharIndex = 0;
+    let vIsPaused = false;
 
     // ── UI helpers ──
     function vShowPermWarn(msg) {
@@ -1368,68 +1369,98 @@ document.addEventListener('DOMContentLoaded', () => {
       const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
       if (mv) u.voice = mv;
       u.onstart = () => {
-        console.log('[Voice] utterance.onstart');
+        console.log('[Voice] UTTER.onstart vUtter=' + (vUtter === u) + ' text.length=' + text.length);
         const dd = window.APP_TRANSLATIONS[languageSelect.value];
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + dd.voicePauseBtn + '</span>';
       };
       u.onboundary = (ev) => {
         vSpeakCharIndex = (vSpeakPausedAt || 0) + ev.charIndex;
-        console.log('[Voice] utterance.onboundary:', ev.name, 'relCharIndex:', ev.charIndex, 'absCharIndex:', vSpeakCharIndex);
+        console.log('[Voice] UTTER.boundary name=' + ev.name + ' relIdx=' + ev.charIndex + ' absIdx=' + vSpeakCharIndex);
       };
       u.onend = () => {
-        console.log('[Voice] utterance.onend');
+        console.log('[Voice] UTTER.onend vIsPaused=' + vIsPaused + ' vState=' + vState);
         vUtter = null;
+        vIsPaused = false;
         vSpeakFullText = '';
         vSpeakPausedAt = 0;
         vSpeakCharIndex = 0;
         if (typeof onDone === 'function') onDone();
       };
       u.onerror = (ev) => {
+        console.log('[Voice] UTTER.onerror error=' + ev.error + ' vIsPaused=' + vIsPaused);
         if (ev.error === 'canceled' || ev.error === 'interrupted') return;
-        console.warn('[Voice] utterance.onerror:', ev.error);
+        console.warn('[Voice] utterance.onerror (non-cancel):', ev.error);
         vUtter = null;
+        vIsPaused = false;
         vSpeakFullText = '';
         vSpeakPausedAt = 0;
         vSpeakCharIndex = 0;
         if (typeof onDone === 'function') onDone();
       };
       vUtter = u;
+      console.log('[Voice] UTTER: created vUtter set, scheduling speak() in 100ms');
+      // Chrome bug: must wait ~100ms after cancel() before speak() or it silently fails
       setTimeout(() => {
+        console.log('[Voice] UTTER.speak() executing  speechSAPI.speaking=' + speechSynthesisAPI.speaking + ' speechSAPI.paused=' + speechSynthesisAPI.paused + ' vState=' + vState);
         try {
           speechSynthesisAPI.speak(u);
-          console.log('[Voice] speechSynthesis.speak() called, text.length=' + text.length);
+          console.log('[Voice] UTTER.speak() returned successfully');
         } catch (e) {
-          console.error('[Voice] speechSynthesis.speak() threw:', e);
+          console.error('[Voice] UTTER.speak() threw exception:', e);
           vUtter = null;
           if (typeof onDone === 'function') onDone();
         }
-      }, 0);
+      }, 100);
     }
 
     function vTogglePause() {
-      if (!speechSynthesisAPI || vState !== VSTATE.SPEAKING) return;
+      console.log('[Voice] TOGGLE_PAUSE entered vState=' + vState + ' vIsPaused=' + vIsPaused + ' vUtter='
+        + (vUtter ? 'set' : 'null') + ' sapi.speaking=' + speechSynthesisAPI.speaking + ' sapi.paused=' + speechSynthesisAPI.paused
+        + ' vSpeakPausedAt=' + vSpeakPausedAt + ' vSpeakCharIndex=' + vSpeakCharIndex + ' vSpeakFullText.length=' + (vSpeakFullText ? vSpeakFullText.length : 0));
+      if (!speechSynthesisAPI || vState !== VSTATE.SPEAKING) {
+        console.log('[Voice] TOGGLE_PAUSE guard: speechAPI=' + !!speechSynthesisAPI + ' vState=' + vState);
+        return;
+      }
       const d = window.APP_TRANSLATIONS[languageSelect.value];
-      if (vUtter && speechSynthesisAPI.speaking) {
+      if (vUtter && speechSynthesisAPI.speaking && !vIsPaused) {
         // Speaking → pause: cancel and save position
         vSpeakPausedAt = vSpeakCharIndex;
+        vIsPaused = true;
+        console.log('[Voice] PAUSE: saving charIndex=' + vSpeakPausedAt + ' of fullText.length=' + vSpeakFullText.length + ' cancelling speech');
         speechSynthesisAPI.cancel();
         vUtter = null;
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
-        console.log('[Voice] PAUSE at charIndex=' + vSpeakPausedAt + ' of ' + vSpeakFullText.length);
-      } else if (vSpeakPausedAt > 0 && vSpeakFullText) {
+        console.log('[Voice] PAUSE: done. sapi.speaking=' + speechSynthesisAPI.speaking + ' vIsPaused=' + vIsPaused);
+      } else if (vIsPaused && vSpeakFullText) {
         // Paused → resume: create new utterance from saved position
-        const remaining = vSpeakFullText.substring(vSpeakPausedAt);
-        console.log('[Voice] RESUME from charIndex=' + vSpeakPausedAt + ' remaining=' + remaining.length + ' chars preview="' + remaining.substring(0, 80) + '..."');
+        console.log('[Voice] RESUME: vIsPaused=' + vIsPaused + ' vSpeakPausedAt=' + vSpeakPausedAt + ' vSpeakFullText.length=' + vSpeakFullText.length);
+        let remaining;
+        if (vSpeakPausedAt > 0 && vSpeakPausedAt < vSpeakFullText.length) {
+          remaining = vSpeakFullText.substring(vSpeakPausedAt);
+          console.log('[Voice] RESUME: partial resume from charIndex=' + vSpeakPausedAt + ' remaining=' + remaining.length + ' chars preview="' + remaining.substring(0, 80) + '..."');
+        } else if (vSpeakPausedAt >= vSpeakFullText.length) {
+          console.log('[Voice] RESUME: vSpeakPausedAt >= fullText length, restarting from beginning');
+          remaining = vSpeakFullText;
+        } else {
+          // vSpeakPausedAt is 0 (no onboundary fired before pause)
+          console.log('[Voice] RESUME: vSpeakPausedAt is 0 (no boundary tracked), restarting from beginning');
+          remaining = vSpeakFullText;
+        }
+        vIsPaused = false;
+        vSpeakPausedAt = 0;
+        vSpeakCharIndex = 0;
         vSpeakUtterance(remaining, () => {
+          console.log('[Voice] RESUME utterance onDone fired');
           vSpeakFullText = '';
           vSpeakPausedAt = 0;
           vSpeakCharIndex = 0;
+          vIsPaused = false;
           if (vState === VSTATE.SPEAKING) vSetState(VSTATE.WAITING);
         });
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
-        console.log('[Voice] RESUME: new utterance created and spoken');
+        console.log('[Voice] RESUME: new utterance passed to vSpeakUtterance, button set to Pause');
       } else {
-        console.log('[Voice] PAUSE ignored: nothing to pause (vSpeakFullText empty or position at 0)');
+        console.log('[Voice] TOGGLE_PAUSE fallthrough: vIsPaused=' + vIsPaused + ' vSpeakFullText=' + (vSpeakFullText ? 'exists' : 'empty') + ' vUtter=' + (vUtter ? 'set' : 'null') + ' speaking=' + speechSynthesisAPI.speaking);
       }
     }
 
@@ -1677,6 +1708,7 @@ document.addEventListener('DOMContentLoaded', () => {
       vSpeakFullText = speakText;
       vSpeakPausedAt = 0;
       vSpeakCharIndex = 0;
+      vIsPaused = false;
 
       console.log('[Voice] vSpeak full length=' + speakText.length + ' preview="' + speakText.substring(0, 80) + '..."');
 
