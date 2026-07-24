@@ -5,9 +5,9 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false   # Set this manually in the Render dashboard — never commit the real key
-      - key: GEMINI_MODEL
-        value: gemini-2.0-flash
+      - key: DEEPSEEK_API_KEY
+        sync: false   # Set this manually in the Render dashboard
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
       - key: NODE_ENV
         value: production
