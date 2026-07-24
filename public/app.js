@@ -1232,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ---- CHANGE B: Turn-Based Voice Conversation (Fixed State Machine) ---- */
     // ── State ──
-    const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking', PAUSED: 'paused', WAITING: 'waiting' };
+    const VSTATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', SPEAKING: 'speaking', WAITING: 'waiting' };
     let vState = VSTATE.IDLE;
     let vTurn = 0;
     let vQuestion = '';
@@ -1266,10 +1266,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (s === VSTATE.SPEAKING) {
         voiceStatus.classList.add('status-speaking');
         voiceStatusText.textContent = d.voiceSpeaking;
-      } else if (s === VSTATE.PAUSED) {
-        voiceStatusText.textContent = d.voicePaused;
       } else if (s === VSTATE.WAITING) {
-        voiceStatusText.textContent = d.voiceSpeaking + ' — ' + d.voiceContinueBtn;
+        voiceStatusText.textContent = d.voiceContinueBtn;
       } else {
         voiceStatusText.textContent = 'Ready';
       }
@@ -1277,17 +1275,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (s === VSTATE.IDLE) {
         voicePauseBtn.classList.add('hidden');
         voiceContinueBtn.classList.add('hidden');
-      } else if (s === VSTATE.LISTENING || s === VSTATE.SPEAKING || s === VSTATE.PROCESSING) {
+      } else if (s === VSTATE.SPEAKING) {
         voicePauseBtn.classList.remove('hidden');
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
-        voiceContinueBtn.classList.add('hidden');
-      } else if (s === VSTATE.PAUSED) {
-        voicePauseBtn.classList.remove('hidden');
-        voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
         voiceContinueBtn.classList.add('hidden');
       } else if (s === VSTATE.WAITING) {
         voicePauseBtn.classList.add('hidden');
         voiceContinueBtn.classList.remove('hidden');
+      } else {
+        voicePauseBtn.classList.add('hidden');
+        voiceContinueBtn.classList.add('hidden');
       }
       console.log(`[Voice] State → ${s}  Turn → ${vTurn}`);
     }
@@ -1357,25 +1354,18 @@ document.addEventListener('DOMContentLoaded', () => {
       vLog.push({ role, text });
     }
 
-    // ── Pause / Resume / Continue logic ──
+    // ── Pause / Resume — audio only, no state change ──
     function vTogglePause() {
-      if (vState === VSTATE.LISTENING) {
-        vStopRec();
-        vSetState(VSTATE.PAUSED);
-      } else if (vState === VSTATE.SPEAKING) {
-        if (speechSynthesisAPI) {
-          speechSynthesisAPI.pause();
-          console.log('[Voice] speechSynthesis.pause() called');
-        }
-        vSetState(VSTATE.PAUSED);
-      } else if (vState === VSTATE.PAUSED) {
-        if (speechSynthesisAPI && speechSynthesisAPI.paused && vUtter) {
-          speechSynthesisAPI.resume();
-          console.log('[Voice] speechSynthesis.resume() called');
-          vSetState(VSTATE.SPEAKING);
-        } else {
-          vStartListening();
-        }
+      if (!speechSynthesisAPI || vState !== VSTATE.SPEAKING) return;
+      const d = window.APP_TRANSLATIONS[languageSelect.value];
+      if (speechSynthesisAPI.paused) {
+        speechSynthesisAPI.resume();
+        voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
+        console.log('[Voice] speechSynthesis.resume() called');
+      } else {
+        speechSynthesisAPI.pause();
+        voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
+        console.log('[Voice] speechSynthesis.pause() called');
       }
     }
 
@@ -1636,7 +1626,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mv) u.voice = mv;
         console.log(`[Voice] voices loaded=${voices.length}  matched=${mv ? mv.name : 'none (using default)'}`);
 
-        u.onstart = () => console.log('[Voice] utterance.onstart');
+        u.onstart = () => {
+          console.log('[Voice] utterance.onstart');
+          const dd = window.APP_TRANSLATIONS[languageSelect.value];
+          voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + dd.voicePauseBtn + '</span>';
+        };
         u.onend = () => {
           console.log('[Voice] utterance.onend');
           vUtter = null;
@@ -1838,11 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const voicePauseBtnText = document.getElementById('voice-pause-btn-text');
     if (voicePauseBtnText) {
-      if (vState === VSTATE.PAUSED) {
-        voicePauseBtnText.textContent = dict.voiceResumeBtn;
-      } else {
-        voicePauseBtnText.textContent = dict.voicePauseBtn;
-      }
+      voicePauseBtnText.textContent = speechSynthesisAPI && speechSynthesisAPI.paused ? dict.voiceResumeBtn : dict.voicePauseBtn;
     }
 
     const voiceContinueBtnText = document.getElementById('voice-continue-btn-text');
