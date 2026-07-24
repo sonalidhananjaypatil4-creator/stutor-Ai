@@ -1247,7 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let vPermWarn = document.getElementById('voice-permission-warning');
     let vPermText = document.getElementById('voice-permission-text');
     let vTimeoutId = null;
-    // Pause/resume tracking — speak one sentence at a time, no onboundary dependency
+    // Pause/resume tracking — speak one chunk at a time (phrase-level granularity)
     let vSentenceArray = [];
     let vCurrentSentenceIndex = 0;
     let vIsPaused = false;
@@ -1316,9 +1316,21 @@ document.addEventListener('DOMContentLoaded', () => {
         .trim();
     }
 
-    // ── Sentence helpers for resume position tracking ──
+    // ── Chunk text into phrase-sized pieces for pause/resume granularity ──
     function splitSentences(text) {
-      return text.split(/(?<=[.!?])(?:\s+|$)/).filter(s => s.length > 0);
+      const MIN_WORDS = 5;
+      const candidates = text.split(/(?<=[.!?,])(?:\s+|$)/).filter(s => s.trim().length > 0);
+      const chunks = [];
+      for (const c of candidates) {
+        const trimmed = c.trim();
+        const wordCount = trimmed.split(/\s+/).length;
+        if (wordCount < MIN_WORDS && chunks.length > 0) {
+          chunks[chunks.length - 1] += ' ' + trimmed;
+        } else {
+          chunks.push(trimmed);
+        }
+      }
+      return chunks;
     }
 
     function vAddBubble(role, text) {
@@ -1362,10 +1374,10 @@ document.addEventListener('DOMContentLoaded', () => {
       vLog.push({ role, text });
     }
 
-    // ── Speak one sentence at a time (no onboundary dependency) ──
+    // ── Speak one chunk at a time (phrase-level granularity) ──
     function speakNextSentence() {
       if (vCurrentSentenceIndex >= vSentenceArray.length) {
-        console.log('[Voice] SENTENCE: all done (' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ')');
+        console.log('[Voice] CHUNK: all done (' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ')');
         vUtter = null;
         vSentenceArray = [];
         vCurrentSentenceIndex = 0;
@@ -1374,7 +1386,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const text = vSentenceArray[vCurrentSentenceIndex];
-      console.log('[Voice] SENTENCE.' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' text="' + text.substring(0, 80) + '"');
+      console.log('[Voice] CHUNK.' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' text="' + text.substring(0, 80) + '"');
       const u = new SpeechSynthesisUtterance(text);
       u.lang = getVoiceLangCode();
       u.rate = 0.95;
@@ -1384,51 +1396,49 @@ document.addEventListener('DOMContentLoaded', () => {
       const mv = voices.find(v => v.lang === lc) || voices.find(v => v.lang.startsWith(lc.split('-')[0]));
       if (mv) u.voice = mv;
       u.onstart = () => {
-        console.log('[Voice] SENTENCE.onstart idx=' + vCurrentSentenceIndex);
+        console.log('[Voice] CHUNK.onstart idx=' + vCurrentSentenceIndex);
         const dd = window.APP_TRANSLATIONS[languageSelect.value];
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + dd.voicePauseBtn + '</span>';
       };
       u.onend = () => {
-        console.log('[Voice] SENTENCE.onend idx=' + vCurrentSentenceIndex + ' (advancing to ' + (vCurrentSentenceIndex + 1) + ')');
+        console.log('[Voice] CHUNK.onend idx=' + vCurrentSentenceIndex + ' (advancing to ' + (vCurrentSentenceIndex + 1) + ')');
         vCurrentSentenceIndex++;
         speakNextSentence();
       };
       u.onerror = (ev) => {
-        console.log('[Voice] SENTENCE.onerror idx=' + vCurrentSentenceIndex + ' error=' + ev.error);
+        console.log('[Voice] CHUNK.onerror idx=' + vCurrentSentenceIndex + ' error=' + ev.error);
         if (ev.error === 'canceled' || ev.error === 'interrupted') return;
-        console.warn('[Voice] SENTENCE.onerror (non-cancel):', ev.error);
+        console.warn('[Voice] CHUNK.onerror (non-cancel):', ev.error);
         vCurrentSentenceIndex++;
         speakNextSentence();
       };
       vUtter = u;
       try {
         speechSynthesisAPI.speak(u);
-        console.log('[Voice] SENTENCE.speak() called for idx=' + vCurrentSentenceIndex);
+        console.log('[Voice] CHUNK.speak() called for idx=' + vCurrentSentenceIndex);
       } catch (e) {
-        console.error('[Voice] SENTENCE.speak() threw exception:', e);
+        console.error('[Voice] CHUNK.speak() threw exception:', e);
         vCurrentSentenceIndex++;
         speakNextSentence();
       }
     }
 
     function vTogglePause() {
-      console.log('[Voice] TOGGLE_PAUSE vState=' + vState + ' vIsPaused=' + vIsPaused + ' vCurrentSentenceIndex=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' vUtter=' + (vUtter ? 'set' : 'null') + ' sapi.speaking=' + speechSynthesisAPI.speaking);
+      console.log('[Voice] TOGGLE_PAUSE vState=' + vState + ' vIsPaused=' + vIsPaused + ' chunkIdx=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' vUtter=' + (vUtter ? 'set' : 'null') + ' sapi.speaking=' + speechSynthesisAPI.speaking);
       if (!speechSynthesisAPI || vState !== VSTATE.SPEAKING) {
         console.log('[Voice] TOGGLE_PAUSE guard: speechAPI=' + !!speechSynthesisAPI + ' vState=' + vState);
         return;
       }
       const d = window.APP_TRANSLATIONS[languageSelect.value];
       if (!vIsPaused) {
-        // Speaking → pause: cancel current sentence; vCurrentSentenceIndex stays where it is
         vIsPaused = true;
-        console.log('[Voice] PAUSE: at sentenceIndex=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' cancelling speech');
+        console.log('[Voice] PAUSE: at chunkIdx=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' cancelling speech');
         speechSynthesisAPI.cancel();
         vUtter = null;
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg> <span id="voice-pause-btn-text">' + d.voiceResumeBtn + '</span>';
         console.log('[Voice] PAUSE: done. vIsPaused=' + vIsPaused);
       } else {
-        // Paused → resume: speak next sentence from current index
-        console.log('[Voice] RESUME: from sentenceIndex=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' text="' + (vSentenceArray[vCurrentSentenceIndex] || '').substring(0, 80) + '"');
+        console.log('[Voice] RESUME: from chunkIdx=' + vCurrentSentenceIndex + '/' + vSentenceArray.length + ' text="' + (vSentenceArray[vCurrentSentenceIndex] || '').substring(0, 80) + '"');
         vIsPaused = false;
         speakNextSentence();
         voicePauseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg> <span id="voice-pause-btn-text">' + d.voicePauseBtn + '</span>';
@@ -1665,7 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // ── Speech synthesis — one sentence at a time ──
+    // ── Speech synthesis — one chunk at a time ──
     function vSpeak(text) {
       if (!speechSynthesisAPI) {
         console.log('[Voice] speechSynthesisAPI not available — skipping speak, showing continue');
@@ -1680,9 +1690,9 @@ document.addEventListener('DOMContentLoaded', () => {
       vCurrentSentenceIndex = 0;
       vIsPaused = false;
 
-      console.log('[Voice] vSpeak: ' + vSentenceArray.length + ' sentences');
+      console.log('[Voice] vSpeak: ' + vSentenceArray.length + ' chunks (MIN_WORDS=5, split on comma+sentence)');
       for (let i = 0; i < Math.min(vSentenceArray.length, 3); i++) {
-        console.log('[Voice] vSpeak sentence[' + i + ']="' + vSentenceArray[i].substring(0, 80) + '"');
+        console.log('[Voice] vSpeak chunk[' + i + '] words=' + vSentenceArray[i].split(/\s+/).length + ' text="' + vSentenceArray[i].substring(0, 80) + '"');
       }
 
       speakNextSentence();
